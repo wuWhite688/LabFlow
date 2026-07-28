@@ -1,0 +1,74 @@
+# LabFlow local production stack: MySQL + Redis + RabbitMQ
+# Default H2 demo mode is unchanged. Use this stack with Spring profile "production".
+name: labflow-prod
+
+services:
+  mysql:
+    # Prefer Docker Hub; if Hub is unreachable, override with e.g. docker.m.daocloud.io/library/mysql:8.4
+    image: ${MYSQL_IMAGE:-mysql:8.4}
+    container_name: labflow-mysql
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "${MYSQL_PORT}:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - labflow-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7.4-alpine}
+    container_name: labflow-redis
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - labflow-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  rabbitmq:
+    image: ${RABBITMQ_IMAGE:-rabbitmq:3.13-management-alpine}
+    container_name: labflow-rabbitmq
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+    volumes:
+      - labflow-rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+volumes:
+  labflow-mysql-data:
+  labflow-redis-data:
+  labflow-rabbitmq-data:
