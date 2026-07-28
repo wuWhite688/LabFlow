@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionModals } from "./components/ActionModals";
 import { AppHeader, WorkspaceHeader } from "./components/AppHeader";
 import { LoginView } from "./components/LoginView";
@@ -42,6 +42,10 @@ export default function Home() {
   const [equipmentForm, setEquipmentForm] = useState<EquipmentForm>(emptyEquipmentForm);
   const [reservationForm, setReservationForm] = useState<ReservationForm>(emptyReservationForm);
   const [workorderForm, setWorkorderForm] = useState<WorkOrderForm>(emptyWorkorderForm);
+  const activeView = useMemo<View>(
+    () => user && isViewAllowed(user.role, view) ? view : "dashboard",
+    [user, view],
+  );
 
   const notify = useCallback((message: string, error = false) => {
     setToast({ message, error });
@@ -120,13 +124,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-    if (!isViewAllowed(user.role, view)) {
-      setView("dashboard");
-      return;
-    }
-    if (accessToken) void load(view, accessToken);
-  }, [user, accessToken, view, load]);
+    if (!user || !accessToken) return;
+    const loadTimer = window.setTimeout(() => void load(activeView, accessToken), 0);
+    return () => window.clearTimeout(loadTimer);
+  }, [user, accessToken, activeView, load]);
 
   const canManageEquipment = user?.role === "ADMIN" || user?.role === "TEACHER";
   const canApprove = user?.role === "ADMIN" || user?.role === "TEACHER";
@@ -179,7 +180,7 @@ export default function Home() {
       await api(path, accessToken, init);
       notify(success);
       setModal(null);
-      await load(view);
+      await load(activeView);
     } catch (error) {
       notify(error instanceof Error ? error.message : "操作失败", true);
     } finally {
@@ -240,15 +241,15 @@ export default function Home() {
   if (!user) return <LoginView login={login} busy={busy} toast={toast} onLoginChange={setLogin} onSubmit={submitLogin} onDemo={(username, password) => setLogin({ username, password })} />;
 
   return <main className="app-shell">
-    <AppHeader user={user} view={view} onViewChange={setView} onLogout={logout} />
+    <AppHeader user={user} view={activeView} onViewChange={setView} onLogout={logout} />
     <section className="workspace">
-      <WorkspaceHeader user={user} view={view} onRefresh={() => void load(view)} />
+      <WorkspaceHeader user={user} view={activeView} onRefresh={() => void load(activeView)} />
       {pageLoading && <div className="loading-bar"><span></span></div>}
-      {view === "dashboard" && <DashboardView user={user} stats={stats} reservations={reservations} workorders={workorders} onViewChange={setView} onOpenCreate={(kind) => void openCreate(kind)} />}
-      {view === "equipment" && <EquipmentView equipment={equipment} filter={equipmentFilter} canManage={canManageEquipment} onFilterChange={setEquipmentFilter} onLoad={applyEquipmentFilter} onCreate={() => void openCreate("equipment")} onRetire={(item) => void mutate(`/api/equipment/${item.id}/retire`, { method: "PATCH" }, `设备 ${item.code} 已退役`)} onRestore={(item) => void mutate(`/api/equipment/${item.id}/restore`, { method: "PATCH" }, `设备 ${item.code} 已恢复`)} />}
-      {view === "reservations" && <ReservationsView user={user} reservations={reservations} scheduleReservations={scheduleReservations} equipment={equipment} filter={reservationFilter} canApprove={canApprove} onFilterChange={setReservationFilter} onLoad={() => void load("reservations")} onCreate={() => void openCreate("reservation")} onDecide={(id, decision) => void decideReservation(id, decision)} onCancel={(id) => void mutate(`/api/reservations/${id}/cancel`, { method: "PATCH" }, "预约已取消")} onComplete={(id) => void mutate(`/api/reservations/${id}/complete`, { method: "PATCH" }, "预约已完成")} />}
-      {view === "workorders" && user && <WorkOrdersView user={user} workorders={workorders} technicians={technicians} filter={workorderFilter} canAssign={canAssignWorkOrders} canClaim={canClaimWorkOrders} canProcess={canProcessWorkOrders} onFilterChange={setWorkorderFilter} onLoad={() => void load("workorders")} onCreate={() => void openCreate("workorder")} onTransition={(item, target, assigneeId) => void transitionWorkorder(item, target, assigneeId)} onClaim={(item) => void claimWorkorder(item)} />}
-      {view === "audit" && <AuditView auditLogs={auditLogs} />}
+      {activeView === "dashboard" && <DashboardView user={user} stats={stats} reservations={reservations} workorders={workorders} onViewChange={setView} onOpenCreate={(kind) => void openCreate(kind)} />}
+      {activeView === "equipment" && <EquipmentView equipment={equipment} filter={equipmentFilter} canManage={canManageEquipment} onFilterChange={setEquipmentFilter} onLoad={applyEquipmentFilter} onCreate={() => void openCreate("equipment")} onRetire={(item) => void mutate(`/api/equipment/${item.id}/retire`, { method: "PATCH" }, `设备 ${item.code} 已退役`)} onRestore={(item) => void mutate(`/api/equipment/${item.id}/restore`, { method: "PATCH" }, `设备 ${item.code} 已恢复`)} />}
+      {activeView === "reservations" && <ReservationsView user={user} reservations={reservations} scheduleReservations={scheduleReservations} equipment={equipment} filter={reservationFilter} canApprove={canApprove} onFilterChange={setReservationFilter} onLoad={() => void load("reservations")} onCreate={() => void openCreate("reservation")} onDecide={(id, decision) => void decideReservation(id, decision)} onCancel={(id) => void mutate(`/api/reservations/${id}/cancel`, { method: "PATCH" }, "预约已取消")} onComplete={(id) => void mutate(`/api/reservations/${id}/complete`, { method: "PATCH" }, "预约已完成")} />}
+      {activeView === "workorders" && user && <WorkOrdersView user={user} workorders={workorders} technicians={technicians} filter={workorderFilter} canAssign={canAssignWorkOrders} canClaim={canClaimWorkOrders} canProcess={canProcessWorkOrders} onFilterChange={setWorkorderFilter} onLoad={() => void load("workorders")} onCreate={() => void openCreate("workorder")} onTransition={(item, target, assigneeId) => void transitionWorkorder(item, target, assigneeId)} onClaim={(item) => void claimWorkorder(item)} />}
+      {activeView === "audit" && <AuditView auditLogs={auditLogs} />}
     </section>
     <ActionModals modal={modal} busy={busy} equipment={equipment} equipmentForm={equipmentForm} reservationForm={reservationForm} workorderForm={workorderForm} onClose={() => setModal(null)} onEquipmentChange={setEquipmentForm} onReservationChange={setReservationForm} onWorkorderChange={setWorkorderForm} onSubmitEquipment={submitEquipment} onSubmitReservation={submitReservation} onSubmitWorkorder={submitWorkorder} />
     <Toast toast={toast} />

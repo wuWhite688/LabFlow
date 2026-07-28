@@ -48,7 +48,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vinext/
 frontend/.next/
-frontend/build/
+!frontend/build/
+frontend/build/*
+!frontend/build/sites-vite-plugin.ts
 frontend/.wrangler/
 
 # local H2 database files

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJ="${LABFLOW_WSL_PROJ:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
+
 export HTTP_PROXY="${HTTP_PROXY:-http://127.0.0.1:7897}"
 export HTTPS_PROXY="${HTTPS_PROXY:-http://127.0.0.1:7897}"
 export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1}"
@@ -10,7 +13,6 @@ if ! docker info >/dev/null 2>&1; then
   sleep 4
 fi
 
-PROJ="<REPO>"
 cd "$PROJ"
 
 docker compose --env-file .env up -d

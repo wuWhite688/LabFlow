@@ -3,7 +3,8 @@
 # Windows start-middleware.ps1 keepalive process (do not rely on nohup alone).
 set -euo pipefail
 
-PROJ="${LABFLOW_WSL_PROJ:-<REPO>}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJ="${LABFLOW_WSL_PROJ:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
 cd "$PROJ"
 
 export HTTP_PROXY="${HTTP_PROXY:-http://127.0.0.1:7897}"
