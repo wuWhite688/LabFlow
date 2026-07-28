@@ -10,7 +10,7 @@ import { DashboardView } from "./components/views/DashboardView";
 import { EquipmentView } from "./components/views/EquipmentView";
 import { ReservationsView } from "./components/views/ReservationsView";
 import { WorkOrdersView } from "./components/views/WorkOrdersView";
-import { api, clearTokens, loadTokens, loginRequest, logoutRequest, saveTokens, subscribeTokens } from "./lib/api";
+import { api, clearAuthSession, clearLegacyAuthStorage, loginRequest, logoutRequest, refreshSession, setAuthSession, subscribeSession } from "./lib/api";
 import { isViewAllowed } from "./lib/roles";
 import type { AuditLog, Equipment, EquipmentForm, ModalKind, PageData, Reservation, ReservationForm, Stats, Technician, ToastState, UserProfile, View, WorkOrder, WorkOrderForm } from "./lib/types";
 
@@ -98,29 +98,28 @@ export default function Home() {
     }
   }, [accessToken, reservationFilter, workorderFilter, notify]);
 
-  // Keep React accessToken in sync when api() silently refreshes tokens (or clears on failure).
+  // Keep React accessToken in sync when api() silently refreshes the HttpOnly-cookie session.
   useEffect(() => {
-    return subscribeTokens((tokens) => {
-      if (!tokens) {
+    return subscribeSession((session) => {
+      if (!session) {
         setAccessToken("");
         setUser(null);
         setStats(null);
         return;
       }
-      setAccessToken(tokens.accessToken);
+      setAccessToken(session.accessToken);
+      setUser({
+        id: session.user.id,
+        username: session.user.username,
+        displayName: session.user.displayName,
+        role: session.user.role as UserProfile["role"],
+      });
     });
   }, []);
 
   useEffect(() => {
-    const saved = loadTokens();
-    if (!saved) return;
-    api<UserProfile>("/api/users/me", saved.accessToken)
-      .then((profile) => {
-        const latest = loadTokens();
-        setAccessToken(latest?.accessToken || saved.accessToken);
-        setUser(profile);
-      })
-      .catch(() => clearTokens());
+    clearLegacyAuthStorage();
+    void refreshSession();
   }, []);
 
   useEffect(() => {
@@ -147,7 +146,7 @@ export default function Home() {
     setBusy(true);
     try {
       const result = await loginRequest(login.username.trim(), login.password);
-      saveTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken, expiresIn: result.expiresIn });
+      setAuthSession(result);
       setAccessToken(result.accessToken);
       setUser({
         id: result.user.id,
@@ -164,11 +163,8 @@ export default function Home() {
   }
 
   async function logout() {
-    const tokens = loadTokens();
-    if (tokens?.refreshToken) {
-      await logoutRequest(tokens.refreshToken);
-    }
-    clearTokens();
+    clearAuthSession();
+    await logoutRequest();
     setAccessToken("");
     setUser(null);
     setStats(null);

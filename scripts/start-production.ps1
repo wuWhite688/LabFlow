@@ -3,7 +3,9 @@ param(
     [int]$ServerPort = 0,
     [string]$ApprovalTimeout = "",
     [switch]$SkipBuild,
-    [switch]$SkipMiddleware
+    [switch]$SkipMiddleware,
+    [string]$JavaPath = "",
+    [switch]$AllowInsecureRefreshCookieForLocalHttp
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,20 +69,9 @@ if ($ServerPort -le 0) {
     if ($env:SERVER_PORT) { $ServerPort = [int]$env:SERVER_PORT } else { $ServerPort = 18080 }
 }
 
-$jdkCandidates = @(
-    "C:\Program Files\Java\jdk-25.0.2",
-    "C:\Program Files\Java\jdk-21",
-    "C:\Program Files\Java\jdk-21.0.2"
-)
-if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME "bin\java.exe"))) {
-    $jdkCandidates += $env:JAVA_HOME
-}
-$javaHome = $jdkCandidates | Where-Object { Test-Path (Join-Path $_ "bin\java.exe") } | Select-Object -First 1
-if (-not $javaHome) {
-    throw "JDK 21+ not found under Program Files\Java. Install JDK 21/25."
-}
-$env:JAVA_HOME = $javaHome
-Write-Host "Using JAVA_HOME=$javaHome"
+. (Join-Path $PSScriptRoot "resolve-java.ps1")
+$javaRuntime = Use-LabFlowJava -JavaPath $JavaPath
+$javaExe = $javaRuntime.Executable
 
 if (-not $SkipMiddleware) {
     & (Join-Path $PSScriptRoot "start-middleware.ps1") -ProjectRoot $ProjectRoot
@@ -115,6 +106,10 @@ $args = @(
     "--server.port=$ServerPort",
     "--logging.file.name=$logFile"
 )
+if ($AllowInsecureRefreshCookieForLocalHttp) {
+    Write-Warning "Refresh Cookie Secure=false for this local HTTP process only. Do not use this switch for HTTPS deployments."
+    $args += "--labops.jwt.refresh-cookie-secure=false"
+}
 if ($ApprovalTimeout) {
     $args += "--labops.reservation-approval-timeout=$ApprovalTimeout"
     # Prefer Rabbit path for verification; keep compensation as slow fallback.
@@ -122,7 +117,6 @@ if ($ApprovalTimeout) {
 }
 
 Write-Host "Starting backend with production profile on port $ServerPort ..."
-$javaExe = Join-Path $javaHome "bin\java.exe"
 # UseShellExecute=true (default when not redirecting) helps detach from agent Job Objects.
 $proc = Start-Process -FilePath $javaExe `
     -ArgumentList $args `

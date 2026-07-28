@@ -69,26 +69,27 @@ src/main/java/com/arthur/labops
 
 | 令牌 | 形态 | 有效期（默认） | 说明 |
 | --- | --- | --- | --- |
-| Access Token | JWT（HS256） | 15 分钟 | 放在 `Authorization: Bearer …`，内含 username/role |
-| Refresh Token | 不透明随机串 | 7 天 | **仅存 SHA-256 哈希**于表 `refresh_tokens`，可撤销 |
+| Access Token | JWT（HS256） | 15 分钟 | 仅保存在前端内存，放入 `Authorization: Bearer …`，内含 username/role |
+| Refresh Token | 不透明随机串 | 7 天 | 浏览器仅持有 HttpOnly Cookie；数据库**仅存 SHA-256 哈希**，可撤销 |
 
 接口：
 
-- `POST /api/auth/login` `{username,password}` → access + refresh + 用户信息  
-- `POST /api/auth/refresh` `{refreshToken}` → 轮换签发新一对令牌（旧 refresh 作废）  
-- `POST /api/auth/logout` `{refreshToken}` → 撤销 refresh  
+- `POST /api/auth/login` `{username,password}` → access + 用户信息，并设置 Refresh Cookie
+- `POST /api/auth/refresh`（无请求体）→ 从 Cookie 读取并轮换 Refresh Token，响应新的 access + 用户信息
+- `POST /api/auth/logout`（无请求体）→ 撤销 Refresh Token 并清除 Cookie
 
 密码仍为 **BCrypt**。后端 `JwtAuthenticationFilter` 解析 Access Token 后填入 SecurityContext，**现有 RBAC 与数据隔离规则不变**。  
-前端登录后保存 token，请求自动带 Bearer；Access 过期时用 Refresh 静默刷新，并通过 `subscribeTokens` **同步 React 内存中的 accessToken**（避免只更新 sessionStorage 导致后续请求仍带旧 token）；刷新失败会清理登录态并回到登录页。
+Refresh Cookie 固定使用 `HttpOnly`、`SameSite=Lax`，后端路径为 `/api/auth`，前端代理会为浏览器重写为 `/api/backend/api/auth`；production 默认开启 `Secure`，仅本机 HTTP 验证脚本会临时覆盖为 `false`。Cookie `Max-Age` 与 `JWT_REFRESH_TTL` 一致。前端只在内存中保存 Access Token，请求自动带 Bearer；Access 过期时由 Cookie 静默刷新，刷新失败会清理登录态并回到登录页。
+刷新与退出会在事务内用 `PESSIMISTIC_WRITE` 锁住旧 Refresh Token，确保同一个 Token 并发轮换时只允许一次成功。
 
 演示账号仍为 student / teacher / technician / admin（密码见下表）。
 
-配置项：`labops.jwt.secret`、`labops.jwt.access-token-ttl`、`labops.jwt.refresh-token-ttl`。  
+配置项：`labops.jwt.secret`、`labops.jwt.access-token-ttl`、`labops.jwt.refresh-token-ttl`、`labops.jwt.refresh-cookie-secure`。
 **production 禁止代码内默认密钥**：必须在 `.env` 设置 `JWT_SECRET`（≥32 字节、非占位值），否则启动失败。`.env.example` 仅保留安全占位说明，不提交真实密钥。
 
 ## 一键运行（H2 演示模式，默认）
 
-本机需要 JDK 25（编译目标 Java 21）和 Node.js 22+：
+本机需要 JDK 21+（本机以 JDK 25 验证，编译目标 Java 21）和 Node.js 22+：
 
 ```powershell
 .\start-fullstack.ps1
@@ -127,10 +128,32 @@ src/main/java/com/arthur/labops
 - JDK 21+（推荐本机已有的 JDK 25）
 - 已安装 PowerShell
 
+PowerShell 入口按 `-JavaPath` → `JAVA_HOME` → `PATH` 查找 JDK，不依赖本机安装目录。例如：
+
+```powershell
+.\build.ps1 -JavaPath "D:\Java\jdk-21"
+.\start-fullstack.ps1 -JavaPath "D:\Java\jdk-21"
+.\scripts\start-production.ps1 -JavaPath "D:\Java\jdk-21"
+```
+
+解析器会实际运行同一 JDK `bin` 目录下的 `java -version` 与 `javac -version`，要求两者主版本一致且不低于 21。可单独探测当前选择结果：
+
+```powershell
+. .\scripts\resolve-java.ps1
+Resolve-LabFlowJava | Format-List Executable, JavaHome, MajorVersion
+```
+
+`verify-production.ps1` 默认自行启动后端时，会通过命令行参数仅为该次本机 HTTP 验证关闭 Refresh Cookie 的 `Secure`；它不会修改 `.env`，production 的默认值仍为 `true`。若使用 `-SkipStart`，已有后端必须由下面的显式本地验证开关启动，否则脚本会拒绝在 HTTP 上误测 Secure Cookie：
+
+```powershell
+.\scripts\start-production.ps1 -AllowInsecureRefreshCookieForLocalHttp
+.\scripts\verify-production.ps1 -SkipStart
+```
+
 ### 1. 准备密钥
 
 ```powershell
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 # 按需修改 .env 中的密码；.env 已加入 .gitignore，不要提交真实密码
 ```
 
@@ -147,6 +170,8 @@ Copy-Item .env.example .env
 | MySQL 8.4 | `labflow-mysql` | `3306` |
 | Redis 7.4 | `labflow-redis` | `6379` |
 | RabbitMQ 3.13 | `labflow-rabbitmq` | `5672` / 管理台 `15672` |
+
+上述中间件端口只绑定宿主机 `127.0.0.1`，不会直接暴露到局域网。
 
 若本机没有 Windows Docker Desktop，脚本会自动走 **WSL Ubuntu Docker Engine**，并创建隐藏的 **WSL keepalive** 进程（PID 写入 `.runtime/wsl-keepalive.pid`），防止 Ubuntu 空闲自动退出导致容器掉线。重复执行是幂等的，不会叠多个 keepalive。
 

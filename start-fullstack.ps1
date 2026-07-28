@@ -1,18 +1,18 @@
 ﻿param(
     [int]$BackendPort = 18080,
     [int]$FrontendPort = 13000,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [string]$JavaPath = ""
 )
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $runtime = Join-Path $root ".runtime"
 $frontend = Join-Path $root "frontend"
-$jdk = "C:\Program Files\Java\jdk-25.0.2"
 
-if (-not (Test-Path "$jdk\bin\java.exe")) {
-    throw "未找到 JDK：$jdk"
-}
+. (Join-Path $PSScriptRoot "scripts\resolve-java.ps1")
+$javaRuntime = Use-LabFlowJava -JavaPath $JavaPath
+$javaExe = $javaRuntime.Executable
 if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
     throw "未找到 npm.cmd，请先安装 Node.js 22+"
 }
@@ -29,7 +29,6 @@ foreach ($name in @("backend.pid", "frontend.pid")) {
     }
 }
 
-$env:JAVA_HOME = $jdk
 if (-not $SkipBuild) {
     & "$root\mvnw.cmd" clean package
     if ($LASTEXITCODE -ne 0) { throw "后端构建失败" }
@@ -47,7 +46,7 @@ if (-not $jar) { throw "未找到后端 jar，请先运行 .\build.ps1" }
 
 $backendOut = Join-Path $runtime "backend.stdout.log"
 $backendErr = Join-Path $runtime "backend.stderr.log"
-$backendProcess = Start-Process -FilePath "$jdk\bin\java.exe" -ArgumentList @("-jar", $jar.FullName, "--server.port=$BackendPort") -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $backendOut -RedirectStandardError $backendErr -PassThru
+$backendProcess = Start-Process -FilePath $javaExe -ArgumentList @("-jar", $jar.FullName, "--server.port=$BackendPort") -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $backendOut -RedirectStandardError $backendErr -PassThru
 [IO.File]::WriteAllText((Join-Path $runtime "backend.pid"), [string]$backendProcess.Id)
 
 $backendReady = $false

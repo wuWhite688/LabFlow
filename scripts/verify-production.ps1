@@ -53,7 +53,11 @@ Log "Report file: $report"
 
 if (-not $SkipStart) {
     Log "Starting middleware + production backend..."
-    & (Join-Path $PSScriptRoot "start-production.ps1") -ProjectRoot $ProjectRoot -ServerPort $ServerPort -ApprovalTimeout "12s"
+    & (Join-Path $PSScriptRoot "start-production.ps1") `
+        -ProjectRoot $ProjectRoot `
+        -ServerPort $ServerPort `
+        -ApprovalTimeout "12s" `
+        -AllowInsecureRefreshCookieForLocalHttp
 }
 
 # 1) Health (authenticated to see component details)
@@ -89,33 +93,52 @@ if ($flywayOut -notmatch "refresh tokens") { throw "Flyway V7 refresh tokens mig
 if ($flywayOut -notmatch "(?m)^\s*7\s+") { throw "Flyway V7 version row missing" }
 Log "PASS Flyway V1..V7 present and successful in MySQL (including refresh_tokens)"
 
-# 2b) JWT login + refresh rotation + revoked old refresh => 401
-Log "--- 2b) JWT login / refresh rotation / revoked refresh ---"
+# 2b) JWT login + HttpOnly Cookie rotation + revoked old refresh => 401
+Log "--- 2b) JWT login / HttpOnly refresh Cookie rotation / revoked refresh ---"
 $loginBody = @{ username = "admin"; password = "admin123" } | ConvertTo-Json -Compress
-$login = Invoke-RestMethod -Method POST -Uri "http://127.0.0.1:$ServerPort/api/auth/login" `
-    -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($loginBody)) -TimeoutSec 10
+$authUri = [Uri]"http://127.0.0.1:$ServerPort/api/auth"
+$loginResponse = Invoke-WebRequest -Method POST -Uri "http://127.0.0.1:$ServerPort/api/auth/login" `
+    -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($loginBody)) `
+    -SessionVariable authSession -UseBasicParsing -TimeoutSec 10
+$login = $loginResponse.Content | ConvertFrom-Json
+$loginSetCookie = [string]$loginResponse.Headers["Set-Cookie"]
 if (-not $login.accessToken) { throw "Login missing accessToken" }
-if (-not $login.refreshToken) { throw "Login missing refreshToken" }
-Log "PASS JWT login returned access + refresh"
-
-$oldRefresh = $login.refreshToken
-$refreshBody = @{ refreshToken = $oldRefresh } | ConvertTo-Json -Compress
-$refreshed = Invoke-RestMethod -Method POST -Uri "http://127.0.0.1:$ServerPort/api/auth/refresh" `
-    -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($refreshBody)) -TimeoutSec 10
-if (-not $refreshed.accessToken -or -not $refreshed.refreshToken) {
-    throw "Refresh missing new token pair"
+if ($null -ne $login.PSObject.Properties["refreshToken"]) { throw "Login exposed refreshToken in JSON" }
+if ($loginSetCookie -notmatch "(?i)\bHttpOnly\b" -or
+    $loginSetCookie -notmatch "(?i)\bSameSite=Lax\b" -or
+    $loginSetCookie -notmatch "(?i)\bPath=/api/auth(?:;|$)") {
+    throw "Login refresh Cookie is missing HttpOnly, SameSite=Lax, or Path=/api/auth: $loginSetCookie"
 }
-if ($refreshed.refreshToken -eq $oldRefresh) {
+if ($loginSetCookie -match "(?i)(?:^|;)\s*Secure(?:;|$)") {
+    if ($SkipStart) {
+        throw ("-SkipStart cannot override the already-running backend's Secure Cookie over local HTTP. " +
+            "Restart it with .\scripts\start-production.ps1 -AllowInsecureRefreshCookieForLocalHttp, " +
+            "or verify the deployment through HTTPS.")
+    }
+    throw "Local HTTP verifier started a backend that still returned a Secure refresh Cookie."
+}
+$oldRefresh = $authSession.Cookies.GetCookies($authUri)["labflow_refresh"].Value
+if (-not $oldRefresh) { throw "Login missing HttpOnly refresh Cookie" }
+Log "PASS JWT login returned access and stored refresh only in Cookie"
+
+$refreshed = Invoke-RestMethod -Method POST -Uri "http://127.0.0.1:$ServerPort/api/auth/refresh" `
+    -WebSession $authSession -TimeoutSec 10
+if (-not $refreshed.accessToken) { throw "Refresh missing new access token" }
+if ($null -ne $refreshed.PSObject.Properties["refreshToken"]) { throw "Refresh exposed refreshToken in JSON" }
+$newRefresh = $authSession.Cookies.GetCookies($authUri)["labflow_refresh"].Value
+if (-not $newRefresh) { throw "Refresh missing rotated refresh Cookie" }
+if ($newRefresh -eq $oldRefresh) {
     throw "Refresh did not rotate refresh token"
 }
-Log "PASS refresh rotation issued new refresh token"
+Log "PASS refresh rotation issued a new HttpOnly Cookie"
 
 $reuseStatus = -1
+$oldTokenSession = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+$oldTokenSession.Cookies.SetCookies($authUri, "labflow_refresh=$oldRefresh; Path=/api/auth")
 try {
-    Invoke-WebRequest -Method POST -Uri "http://127.0.0.1:$ServerPort/api/auth/refresh" `
-        -ContentType "application/json; charset=utf-8" `
-        -Body ([Text.Encoding]::UTF8.GetBytes($refreshBody)) -UseBasicParsing -TimeoutSec 10 | Out-Null
-    $reuseStatus = 200
+    $reuseResponse = Invoke-WebRequest -Method POST -Uri "http://127.0.0.1:$ServerPort/api/auth/refresh" `
+        -WebSession $oldTokenSession -UseBasicParsing -TimeoutSec 10
+    $reuseStatus = [int]$reuseResponse.StatusCode
 } catch {
     if ($_.Exception.Response) {
         $reuseStatus = [int]$_.Exception.Response.StatusCode.value__

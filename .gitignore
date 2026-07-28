@@ -34,6 +34,7 @@ build/
 
 # local full-stack runtime files
 .runtime/
+.playwright-cli/
 *.pid
 *.stdout.log
 *.stderr.log

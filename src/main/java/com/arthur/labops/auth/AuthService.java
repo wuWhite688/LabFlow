@@ -43,7 +43,7 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResponse login(LoginRequest request) {
+    public IssuedAuthSession login(LoginRequest request) {
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.username().trim(), request.password()));
@@ -62,9 +62,9 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResponse refresh(RefreshRequest request) {
-        String raw = request.refreshToken().trim();
-        RefreshToken stored = refreshTokenRepository.findByTokenHash(hashToken(raw))
+    public IssuedAuthSession refresh(String rawRefreshToken) {
+        String raw = requireRefreshToken(rawRefreshToken);
+        RefreshToken stored = refreshTokenRepository.findByTokenHashForUpdate(hashToken(raw))
                 .orElseThrow(() -> new BusinessException(
                         "INVALID_REFRESH_TOKEN", "刷新令牌无效或已失效", HttpStatus.UNAUTHORIZED));
 
@@ -86,25 +86,36 @@ public class AuthService {
     }
 
     @Transactional
-    public void logout(LogoutRequest request) {
-        String raw = request.refreshToken().trim();
-        refreshTokenRepository.findByTokenHash(hashToken(raw)).ifPresent(token -> {
+    public void logout(String rawRefreshToken) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            return;
+        }
+        String raw = rawRefreshToken.trim();
+        refreshTokenRepository.findByTokenHashForUpdate(hashToken(raw)).ifPresent(token -> {
             if (token.getRevokedAt() == null) {
                 token.revoke(Instant.now());
             }
         });
     }
 
-    private AuthResponse issueTokens(PlatformUser user) {
+    private IssuedAuthSession issueTokens(PlatformUser user) {
         String accessToken = jwtService.createAccessToken(user);
         String rawRefresh = generateRefreshToken();
         Instant refreshExp = Instant.now().plus(jwtProperties.getRefreshTokenTtl());
         refreshTokenRepository.save(new RefreshToken(user, hashToken(rawRefresh), refreshExp));
-        return AuthResponse.of(
+        AuthResponse response = AuthResponse.of(
                 accessToken,
                 jwtService.accessTokenTtlSeconds(),
-                rawRefresh,
                 CurrentUserResponse.from(user));
+        return new IssuedAuthSession(response, rawRefresh);
+    }
+
+    private String requireRefreshToken(String rawRefreshToken) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            throw new BusinessException(
+                    "INVALID_REFRESH_TOKEN", "刷新令牌无效或已失效", HttpStatus.UNAUTHORIZED);
+        }
+        return rawRefreshToken.trim();
     }
 
     private String generateRefreshToken() {

@@ -68,8 +68,8 @@ test("keeps LabFlow app source structure without starter skeleton", async () => 
   assert.match(page, /LoginView|export default function Home/);
   assert.match(page, /canAssignWorkOrders|WorkOrdersView|EquipmentView/);
   assert.match(page, /isViewAllowed|onOpenCreate/);
-  assert.match(page, /loginRequest|saveTokens|clearTokens|logoutRequest/);
-  assert.match(page, /subscribeTokens/);
+  assert.match(page, /loginRequest|setAuthSession|clearAuthSession|logoutRequest/);
+  assert.match(page, /subscribeSession|refreshSession/);
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview|sites-skeleton|authHeader|Basic /);
 
 

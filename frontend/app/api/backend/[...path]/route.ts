@@ -9,7 +9,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const incomingUrl = new URL(request.url);
   const targetUrl = new URL(`/${path.join("/")}${incomingUrl.search}`, BACKEND_BASE_URL);
   const headers = new Headers();
-  for (const name of ["authorization", "content-type", "accept"]) {
+  for (const name of ["authorization", "content-type", "accept", "cookie"]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
@@ -21,9 +21,19 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
       body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
       cache: "no-store",
     });
+    const responseHeaders = new Headers({
+      "content-type": response.headers.get("content-type") ?? "application/json; charset=utf-8",
+    });
+    const setCookie = response.headers.get("set-cookie");
+    if (setCookie) {
+      responseHeaders.set(
+        "set-cookie",
+        setCookie.replace(/Path=\/api\/auth(?=;|$)/i, "Path=/api/backend/api/auth"),
+      );
+    }
     return new Response(response.body, {
       status: response.status,
-      headers: { "content-type": response.headers.get("content-type") ?? "application/json; charset=utf-8" },
+      headers: responseHeaders,
     });
   } catch {
     return Response.json(

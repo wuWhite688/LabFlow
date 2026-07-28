@@ -1,10 +1,11 @@
-﻿$ErrorActionPreference = "Stop"
+param(
+    [string]$JavaPath = ""
+)
 
-$jdk = "C:\Program Files\Java\jdk-25.0.2"
-if (-not (Test-Path "$jdk\bin\java.exe")) {
-    throw "未找到 JDK：$jdk"
-}
+$ErrorActionPreference = "Stop"
 
-$env:JAVA_HOME = $jdk
+. (Join-Path $PSScriptRoot "scripts\resolve-java.ps1")
+$null = Use-LabFlowJava -JavaPath $JavaPath
+
 & "$PSScriptRoot\mvnw.cmd" spring-boot:run "-Dspring-boot.run.arguments=--server.port=18080"
 exit $LASTEXITCODE

@@ -16,6 +16,8 @@ public class JwtProperties {
 
     private Duration refreshTokenTtl = Duration.ofDays(7);
 
+    private boolean refreshCookieSecure;
+
     public String getSecret() {
         return secret;
     }
@@ -38,5 +40,13 @@ public class JwtProperties {
 
     public void setRefreshTokenTtl(Duration refreshTokenTtl) {
         this.refreshTokenTtl = refreshTokenTtl;
+    }
+
+    public boolean isRefreshCookieSecure() {
+        return refreshCookieSecure;
+    }
+
+    public void setRefreshCookieSecure(boolean refreshCookieSecure) {
+        this.refreshCookieSecure = refreshCookieSecure;
     }
 }
