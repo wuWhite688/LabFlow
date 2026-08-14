@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+# 同一分支上新的推送会取消仍在排队的旧运行，避免浪费 runner 时间
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: 后端 · Java 21
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 准备 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # 默认 profile 走 H2、进程内锁与本地定时器，零外部依赖。
+      # 因此并发预约、工单并发派单、预约过期回滚、RabbitMQ 调度顺序
+      # 这些集成测试不需要在 CI 里额外拉起 MySQL / Redis / RabbitMQ。
+      - name: 构建与测试
+        run: ./mvnw -B --no-transfer-progress verify
+
+      # 失败时同样上传，否则排查 CI 红灯只能靠日志里被截断的堆栈
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-surefire-reports
+          path: target/surefire-reports/
+          retention-days: 7
+
+  frontend:
+    name: 前端 · Node 22
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # package.json 的 engines 要求 >=22.13.0
+      - name: 准备 Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装依赖
+        working-directory: frontend
+        run: npm ci
+
+      - name: 代码规范检查
+        working-directory: frontend
+        run: npm run lint
+
+      # 这一步同时守着一个真实踩过的坑：vite.config.ts 依赖
+      # frontend/build/sites-vite-plugin.ts，而 .gitignore 一度把整个
+      # build/ 排除掉，导致本机因残留文件能构建、新 clone 必然失败。
+      # CI 每次都是全新 checkout，这类"只有我这台机器能跑"的问题会当场暴露。
+      - name: 测试（含生产构建）
+        working-directory: frontend
+        run: npm test

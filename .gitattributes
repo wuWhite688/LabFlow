@@ -1,2 +1,7 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
+
+# scripts/ 下的 shell 脚本由 WSL 内的 bash 执行。若 checkout 成 CRLF，
+# 解释器会把行尾的 \r 当成命令的一部分，报 bad interpreter: /bin/bash^M。
+# 这些文件在 index 里本来就是 LF，只是缺了这条规则约束工作区。
+*.sh text eol=lf
