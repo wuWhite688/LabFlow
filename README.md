@@ -49,6 +49,33 @@ src/main/java/com/arthur/labops
 
 本地环境使用 H2、本地锁和本地定时器，做到零外部依赖启动；生产 Profile 切换至 MySQL、Redis 与 RabbitMQ。正式环境会关闭体验账号和种子数据。
 
+### 并发预约锁：Redis 与数据库双层
+
+同一设备同一时段的重复预约，由两层机制共同保证，**分布式锁不是唯一防线**：
+
+```text
+ReservationApplicationService
+└─ reservationLock.execute(equipmentId, ...)        ← 第一层：Redis SET NX PX，租约 10s
+   └─ ReservationService.create()   @Transactional  ← 锁在事务之外
+      ├─ equipmentRepository.findByIdForUpdate()    ← 第二层：设备行 PESSIMISTIC_WRITE
+      ├─ assertNoConflict()                         ← 区间重叠判定 start < reqEnd && end > reqStart
+      └─ save()
+```
+
+**为什么锁加在事务外层**：若把加锁放进 `@Transactional` 方法内部，锁会在事务提交**之前**释放，中间窗口里另一个请求能拿到锁却读不到尚未提交的那条预约，冲突校验直接失效。锁的范围必须完整覆盖事务边界。
+
+**锁实现的三个细节**（`RedisReservationLock`）：
+
+- 获取用 `setIfAbsent(key, uuidToken, leaseTime)`，即 `SET NX PX`，一次往返完成"抢占 + 设置租约"，不存在先 SET 后 EXPIRE 之间宕机导致的永久死锁
+- 释放走 **Lua 脚本先比对 token 再 DEL**，保证不会删掉其他请求的锁（自己的锁若已因租约过期被顶替，此时删除就是误删）
+- Redis 不可用时抛 `REDIS_UNAVAILABLE` **503 快速失败**，不静默降级为无锁执行
+
+**为什么没有做锁续期（watchdog）**：临界区是一次行锁查询 + 一次区间冲突查询 + 一次 insert 的纯本地数据库短事务，实际耗时远小于 10 秒租约。更关键的是——**即使租约提前过期，也不会产生重复预约**：`findByIdForUpdate` 对设备行持有悲观写锁，同一设备的并发请求在数据库层依然串行，冲突校验不会被穿透。Redis 锁在这里的职责是**把冲突拦在事务之前**，减少无谓的行锁排队与事务回滚，而不是充当正确性的最后一道防线。为一个不承担正确性的锁引入后台续期线程、线程生命周期绑定和续期失败处理，复杂度并不划算。
+
+**这个取舍在什么情况下失效**（值得写下来的边界）：如果临界区里加入外部调用（推送通知、对接校方审批系统）使耗时逼近租约，或者去掉设备行锁改用乐观并发控制，那么租约过期就会真正导致两个请求同时进入临界区，此时**必须**补上续期机制——而那时正确的做法是换成 Redisson，不是自己手写续期线程。
+
+**为什么当前不用 Redisson**：Redisson 的核心增量是 watchdog 自动续期、可重入锁和 RedLock，如上所述，本场景三者都用不上，引入它等于为用不到的能力多背一个重依赖。而 `spring-boot-starter-data-redis` 已在依赖里，三十行代码就能把"原子获取 / 租约兜底 / 防误删释放"三个关键点显式写出来。另外**刻意不做 RedLock**：本项目部署的是单 Redis 实例，RedLock 的多独立节点前提根本不成立，强行套用只会得到虚假的安全感。
+
 ### 预约过期延迟任务（RabbitMQ）
 
 **问题**：单条共享 FIFO 延迟队列 + 逐消息 `expiration` 时，队头长 TTL（如 15 分钟）会挡住后面的短 TTL（如 12 秒），短消息即使到期也不会进入死信。
