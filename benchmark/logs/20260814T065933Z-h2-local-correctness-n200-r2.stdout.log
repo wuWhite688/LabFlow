@@ -1,0 +1,267 @@
+BENCH begin correctness profile=h2-local N=200 round=2
+base_url=http://127.0.0.1:18080 python=3.14.0 (tags/v3.14.0:ebf955d, Oct  7 2025, 10:15:03) [MSC v.1944 64 bit (AMD64)] pid=11032
+LOGIN student status=200 latency_ms=82.6
+LOGIN admin status=200 latency_ms=69.1
+CREATE_EQUIPMENT code=BM-C-h2-local-20260814T065949Z-200-R2 status=201 latency_ms=18.6
+CORRECTNESS start profile=h2-local N=200 round=2 equipmentId=16 startTime=2026-08-18T08:59:49Z endTime=2026-08-18T09:59:49Z
+---- SUMMARY ----
+{
+  "scenario": "correctness",
+  "profile": "h2-local",
+  "lock_impl": "LocalReservationLock",
+  "base_url": "http://127.0.0.1:18080",
+  "concurrency": 200,
+  "round": 2,
+  "total_planned": 200,
+  "total_observed": 200,
+  "success_201": 1,
+  "conflict_409": 199,
+  "failed_other": 0,
+  "status_counts": {
+    "201": 1,
+    "409": 199
+  },
+  "error_code_counts": {
+    "RESERVATION_CONFLICT": 199,
+    "HTTP_201": 1
+  },
+  "wall_seconds": 0.218094,
+  "throughput_rps": 917.037876,
+  "latency_all": {
+    "count": 200,
+    "min_ms": 26.945,
+    "avg_ms": 116.945,
+    "p50_ms": 117.224,
+    "p95_ms": 197.061,
+    "p99_ms": 206.414,
+    "max_ms": 209.401
+  },
+  "latency_201": {
+    "count": 1,
+    "min_ms": 34.025,
+    "avg_ms": 34.025,
+    "p50_ms": 34.025,
+    "p95_ms": 34.025,
+    "p99_ms": 34.025,
+    "max_ms": 34.025
+  },
+  "latency_409": {
+    "count": 199,
+    "min_ms": 26.945,
+    "avg_ms": 117.362,
+    "p50_ms": 117.727,
+    "p95_ms": 197.069,
+    "p99_ms": 206.435,
+    "max_ms": 209.401
+  },
+  "started_at": "2026-08-14T06:59:49+00:00",
+  "equipment_id": 16,
+  "equipment_code": "BM-C-h2-local-20260814T065949Z-200-R2",
+  "start_time": "2026-08-18T08:59:49Z",
+  "end_time": "2026-08-18T09:59:49Z",
+  "worker_exceptions": [],
+  "threads_still_alive": []
+}
+---- PER-REQUEST ----
+idx=0 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=115.336 reservation_id=None
+idx=1 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=74.555 reservation_id=None
+idx=2 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=104.979 reservation_id=None
+idx=3 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=51.738 reservation_id=None
+idx=4 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=71.457 reservation_id=None
+idx=5 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=173.269 reservation_id=None
+idx=6 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=136.296 reservation_id=None
+idx=7 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=139.316 reservation_id=None
+idx=8 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=150.579 reservation_id=None
+idx=9 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=196.241 reservation_id=None
+idx=10 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=45.581 reservation_id=None
+idx=11 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=53.162 reservation_id=None
+idx=12 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=58.583 reservation_id=None
+idx=13 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=136.316 reservation_id=None
+idx=14 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=199.235 reservation_id=None
+idx=15 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=192.013 reservation_id=None
+idx=16 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=113.181 reservation_id=None
+idx=17 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=166.36 reservation_id=None
+idx=18 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=26.945 reservation_id=None
+idx=19 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=81.139 reservation_id=None
+idx=20 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=85.65 reservation_id=None
+idx=21 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=109.262 reservation_id=None
+idx=22 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=158.079 reservation_id=None
+idx=23 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=91.74 reservation_id=None
+idx=24 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=49.83 reservation_id=None
+idx=25 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=95.293 reservation_id=None
+idx=26 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=122.029 reservation_id=None
+idx=27 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=128.426 reservation_id=None
+idx=28 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=90.234 reservation_id=None
+idx=29 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=153.688 reservation_id=None
+idx=30 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=58.371 reservation_id=None
+idx=31 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=121.202 reservation_id=None
+idx=32 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=90.016 reservation_id=None
+idx=33 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=145.867 reservation_id=None
+idx=34 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=200.356 reservation_id=None
+idx=35 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=152.818 reservation_id=None
+idx=36 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=109.328 reservation_id=None
+idx=37 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=111.875 reservation_id=None
+idx=38 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=128.897 reservation_id=None
+idx=39 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=162.125 reservation_id=None
+idx=40 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=55.693 reservation_id=None
+idx=41 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=199.048 reservation_id=None
+idx=42 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=92.31 reservation_id=None
+idx=43 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=102.588 reservation_id=None
+idx=44 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=151.743 reservation_id=None
+idx=45 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=123.924 reservation_id=None
+idx=46 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=79.11 reservation_id=None
+idx=47 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=27.483 reservation_id=None
+idx=48 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=152.771 reservation_id=None
+idx=49 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=119.833 reservation_id=None
+idx=50 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=98.0 reservation_id=None
+idx=51 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=34.696 reservation_id=None
+idx=52 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=133.255 reservation_id=None
+idx=53 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=47.828 reservation_id=None
+idx=54 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=148.032 reservation_id=None
+idx=55 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=106.523 reservation_id=None
+idx=56 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=110.734 reservation_id=None
+idx=57 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=131.554 reservation_id=None
+idx=58 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=174.425 reservation_id=None
+idx=59 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=185.835 reservation_id=None
+idx=60 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=42.032 reservation_id=None
+idx=61 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=83.291 reservation_id=None
+idx=62 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=64.063 reservation_id=None
+idx=63 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=143.446 reservation_id=None
+idx=64 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=132.998 reservation_id=None
+idx=65 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=49.1 reservation_id=None
+idx=66 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=177.548 reservation_id=None
+idx=67 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=160.946 reservation_id=None
+idx=68 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=127.448 reservation_id=None
+idx=69 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=137.82 reservation_id=None
+idx=70 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=72.639 reservation_id=None
+idx=71 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=87.027 reservation_id=None
+idx=72 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=151.257 reservation_id=None
+idx=73 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=118.617 reservation_id=None
+idx=74 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=53.636 reservation_id=None
+idx=75 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=163.707 reservation_id=None
+idx=76 status=201 class=success code=None latency_ms=34.025 reservation_id=12
+idx=77 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=55.973 reservation_id=None
+idx=78 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=69.078 reservation_id=None
+idx=79 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=140.647 reservation_id=None
+idx=80 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=163.622 reservation_id=None
+idx=81 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=152.472 reservation_id=None
+idx=82 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=190.879 reservation_id=None
+idx=83 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=99.153 reservation_id=None
+idx=84 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=197.215 reservation_id=None
+idx=85 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=69.154 reservation_id=None
+idx=86 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=148.913 reservation_id=None
+idx=87 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=77.395 reservation_id=None
+idx=88 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=83.723 reservation_id=None
+idx=89 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=154.117 reservation_id=None
+idx=90 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=168.491 reservation_id=None
+idx=91 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=72.947 reservation_id=None
+idx=92 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=118.07 reservation_id=None
+idx=93 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=122.707 reservation_id=None
+idx=94 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=58.058 reservation_id=None
+idx=95 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=66.807 reservation_id=None
+idx=96 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=96.589 reservation_id=None
+idx=97 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=80.649 reservation_id=None
+idx=98 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=205.705 reservation_id=None
+idx=99 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=88.071 reservation_id=None
+idx=100 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=46.635 reservation_id=None
+idx=101 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=79.162 reservation_id=None
+idx=102 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=79.179 reservation_id=None
+idx=103 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=75.3 reservation_id=None
+idx=104 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=201.608 reservation_id=None
+idx=105 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=97.813 reservation_id=None
+idx=106 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=64.391 reservation_id=None
+idx=107 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=89.109 reservation_id=None
+idx=108 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=195.239 reservation_id=None
+idx=109 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=83.145 reservation_id=None
+idx=110 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=162.632 reservation_id=None
+idx=111 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=209.401 reservation_id=None
+idx=112 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=97.722 reservation_id=None
+idx=113 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=47.513 reservation_id=None
+idx=114 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=49.801 reservation_id=None
+idx=115 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=156.523 reservation_id=None
+idx=116 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=197.053 reservation_id=None
+idx=117 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=192.302 reservation_id=None
+idx=118 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=65.258 reservation_id=None
+idx=119 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=105.245 reservation_id=None
+idx=120 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=55.832 reservation_id=None
+idx=121 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=108.725 reservation_id=None
+idx=122 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=68.516 reservation_id=None
+idx=123 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=187.483 reservation_id=None
+idx=124 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=38.926 reservation_id=None
+idx=125 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=101.152 reservation_id=None
+idx=126 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=164.671 reservation_id=None
+idx=127 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=51.33 reservation_id=None
+idx=128 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=186.293 reservation_id=None
+idx=129 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=206.393 reservation_id=None
+idx=130 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=181.621 reservation_id=None
+idx=131 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=118.371 reservation_id=None
+idx=132 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=151.532 reservation_id=None
+idx=133 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=48.241 reservation_id=None
+idx=134 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=116.721 reservation_id=None
+idx=135 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=174.602 reservation_id=None
+idx=136 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=130.01 reservation_id=None
+idx=137 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=114.248 reservation_id=None
+idx=138 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=128.94 reservation_id=None
+idx=139 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=204.886 reservation_id=None
+idx=140 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=142.428 reservation_id=None
+idx=141 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=47.888 reservation_id=None
+idx=142 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=128.973 reservation_id=None
+idx=143 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=156.487 reservation_id=None
+idx=144 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=118.952 reservation_id=None
+idx=145 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=177.311 reservation_id=None
+idx=146 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=137.627 reservation_id=None
+idx=147 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=48.007 reservation_id=None
+idx=148 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=66.062 reservation_id=None
+idx=149 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=163.737 reservation_id=None
+idx=150 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=183.95 reservation_id=None
+idx=151 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=43.935 reservation_id=None
+idx=152 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=124.652 reservation_id=None
+idx=153 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=179.373 reservation_id=None
+idx=154 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=179.739 reservation_id=None
+idx=155 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=87.68 reservation_id=None
+idx=156 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=56.565 reservation_id=None
+idx=157 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=86.544 reservation_id=None
+idx=158 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=90.242 reservation_id=None
+idx=159 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=42.615 reservation_id=None
+idx=160 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=157.074 reservation_id=None
+idx=161 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=88.14 reservation_id=None
+idx=162 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=145.955 reservation_id=None
+idx=163 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=104.398 reservation_id=None
+idx=164 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=72.462 reservation_id=None
+idx=165 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=169.299 reservation_id=None
+idx=166 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=107.248 reservation_id=None
+idx=167 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=125.839 reservation_id=None
+idx=168 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=174.653 reservation_id=None
+idx=169 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=51.054 reservation_id=None
+idx=170 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=72.969 reservation_id=None
+idx=171 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=117.727 reservation_id=None
+idx=172 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=186.999 reservation_id=None
+idx=173 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=90.502 reservation_id=None
+idx=174 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=175.771 reservation_id=None
+idx=175 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=183.406 reservation_id=None
+idx=176 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=46.071 reservation_id=None
+idx=177 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=135.117 reservation_id=None
+idx=178 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=123.113 reservation_id=None
+idx=179 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=86.412 reservation_id=None
+idx=180 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=208.5 reservation_id=None
+idx=181 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=180.943 reservation_id=None
+idx=182 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=137.798 reservation_id=None
+idx=183 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=178.641 reservation_id=None
+idx=184 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=58.971 reservation_id=None
+idx=185 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=100.875 reservation_id=None
+idx=186 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=98.83 reservation_id=None
+idx=187 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=76.919 reservation_id=None
+idx=188 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=143.901 reservation_id=None
+idx=189 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=195.652 reservation_id=None
+idx=190 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=52.027 reservation_id=None
+idx=191 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=66.46 reservation_id=None
+idx=192 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=32.04 reservation_id=None
+idx=193 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=182.232 reservation_id=None
+idx=194 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=145.848 reservation_id=None
+idx=195 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=190.525 reservation_id=None
+idx=196 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=169.019 reservation_id=None
+idx=197 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=145.813 reservation_id=None
+idx=198 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=60.926 reservation_id=None
+idx=199 status=409 class=conflict code=RESERVATION_CONFLICT latency_ms=45.887 reservation_id=None
+WROTE <REPO>\benchmark\results\20260814T065933Z-h2-local-correctness-n200-r2.json
+WROTE <REPO>\benchmark\results\20260814T065933Z-h2-local-correctness-n200-r2.jsonl

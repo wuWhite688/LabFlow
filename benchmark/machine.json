@@ -1,0 +1,15 @@
+{
+    "source":  "benchmark/run-all.ps1",
+    "collected_at_utc":  "2026-08-14T07:03:52.7036793Z",
+    "cpu_name":  "13th Gen Intel(R) Core(TM) i9-13980HX",
+    "physical_cores":  24,
+    "logical_processors":  32,
+    "memory_gb":  31.63,
+    "os":  "Microsoft Windows 11 家庭版 中文版 10.0.26200 64 位",
+    "java_home":  "C:\\Program Files\\Java\\jdk-25.0.2",
+    "java_major":  25,
+    "java_version":  "java version \"25.0.2\" 2026-01-20 LTS",
+    "java_version_raw":  "java version \"25.0.2\" 2026-01-20 LTS\r\nJava(TM) SE Runtime Environment (build 25.0.2+10-LTS-69)\r\nJava HotSpot(TM) 64-Bit Server VM (build 25.0.2+10-LTS-69, mixed mode, sharing)",
+    "python_version":  "3.14.0 (tags/v3.14.0:ebf955d, Oct  7 2025, 10:15:03) [MSC v.1944 64 bit (AMD64)]",
+    "python_launcher":  "py -3"
+}

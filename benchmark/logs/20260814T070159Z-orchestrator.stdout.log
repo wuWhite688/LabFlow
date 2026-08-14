@@ -1,0 +1,6 @@
+﻿[2026-08-14T07:02:00.9353715Z] Wrote <REPO>\benchmark\machine.json
+[2026-08-14T07:02:00.9399716Z] Orchestrator start root=<REPO>
+[2026-08-14T07:02:00.9419494Z] Attempting WSL/Docker middleware via scripts/start-middleware.ps1 (in-process)
+[2026-08-14T07:02:09.6071623Z] Production path failed:  Network labflow-prod_default  Creating
+[2026-08-14T07:02:22.4719538Z] RESULTS.md written
+[2026-08-14T07:02:22.4759529Z] Orchestrator finished

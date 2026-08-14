@@ -1,0 +1,960 @@
+{
+  "scenario": "correctness",
+  "profile": "mysql-redis",
+  "lock_impl": "RedisReservationLock",
+  "base_url": "http://127.0.0.1:18080",
+  "concurrency": 100,
+  "round": 3,
+  "total_planned": 100,
+  "total_observed": 100,
+  "success_201": 1,
+  "conflict_409": 99,
+  "failed_other": 0,
+  "status_counts": {
+    "201": 1,
+    "409": 99
+  },
+  "error_code_counts": {
+    "RESERVATION_LOCK_TIMEOUT": 40,
+    "RESERVATION_CONFLICT": 59,
+    "HTTP_201": 1
+  },
+  "wall_seconds": 2.076664,
+  "throughput_rps": 48.154153,
+  "latency_all": {
+    "count": 100,
+    "min_ms": 39.71,
+    "avg_ms": 1394.685,
+    "p50_ms": 1691.193,
+    "p95_ms": 2067.647,
+    "p99_ms": 2071.014,
+    "max_ms": 2073.621
+  },
+  "latency_201": {
+    "count": 1,
+    "min_ms": 39.71,
+    "avg_ms": 39.71,
+    "p50_ms": 39.71,
+    "p95_ms": 39.71,
+    "p99_ms": 39.71,
+    "max_ms": 39.71
+  },
+  "latency_409": {
+    "count": 99,
+    "min_ms": 73.115,
+    "avg_ms": 1408.372,
+    "p50_ms": 1715.828,
+    "p95_ms": 2067.648,
+    "p99_ms": 2071.041,
+    "max_ms": 2073.621
+  },
+  "started_at": "2026-08-14T07:04:33+00:00",
+  "equipment_id": 23,
+  "equipment_code": "BM-C-mysql-redis-20260814T070431Z-100-R3",
+  "start_time": "2026-08-18T10:04:31Z",
+  "end_time": "2026-08-18T11:04:31Z",
+  "worker_exceptions": [],
+  "threads_still_alive": [],
+  "requests": [
+    {
+      "idx": 0,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2028.634,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.371626600Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 1,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 73.115,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.417827900Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 2,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2070.988,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.420327500Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 3,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 198.866,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.542216900Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 4,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1129.826,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.478884600Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 5,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1928.116,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.272263900Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 6,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1359.753,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.704106800Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 7,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 929.914,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.274727400Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 8,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 89.848,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.433866900Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 9,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2026.555,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 10,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2016.814,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 11,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2026.507,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 12,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2073.621,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.418830500Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 13,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 519.448,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.867876100Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 14,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1764.03,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.113443600Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 15,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2026.344,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 16,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2023.25,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.371626600Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 17,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2020.118,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 18,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2026.106,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 19,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1185.267,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.530742100Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 20,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2020.691,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.366125300Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 21,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1202.452,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.547677100Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 22,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2023.229,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 23,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2024.936,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 24,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2022.683,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 25,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 444.634,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.790035800Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 26,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 584.555,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.930028500Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 27,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2020.421,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 28,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2062.924,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.420327500Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 29,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 381.477,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.727299200Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 30,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1666.559,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.012804200Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 31,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 626.913,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.976701700Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 32,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1922.152,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.268757600Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 33,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 645.317,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.991130100Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 34,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2065.004,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.420327500Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 35,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1508.375,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.858692100Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 36,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 693.522,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.038786800Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 37,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 507.066,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.852832300Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 38,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2024.263,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 39,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1975.76,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.325985600Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 40,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2068.494,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.418830500Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 41,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1302.779,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.653417700Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 42,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1607.891,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.959972400Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 43,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1870.407,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.217538600Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 44,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2025.338,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 45,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 872.154,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.222367200Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 46,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 270.499,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.621006Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 47,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1098.65,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.445329900Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 48,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 335.648,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.681812300Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 49,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2025.226,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 50,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2024.147,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 51,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 253.587,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.603760700Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 52,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2017.221,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 53,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1029.451,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.376131400Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 54,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2025.091,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 55,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 704.754,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.054891600Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 56,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2023.85,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 57,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 889.222,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.239591Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 58,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1715.828,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.063419900Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 59,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 2025.551,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.371626600Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 60,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2015.457,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.366125300Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 61,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2022.466,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 62,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 392.901,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.743693900Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 63,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1148.284,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.495115Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 64,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 813.26,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.163928700Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 65,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1561.367,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.908710800Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 66,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2020.875,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 67,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 148.319,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.495149300Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 68,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 993.63,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.340899300Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 69,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 754.918,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.102349600Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 70,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2025.099,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.371626600Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 71,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2067.654,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.418830500Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 72,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1971.383,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.318796Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 73,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 768.334,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.115991500Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 74,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1458.795,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.806987800Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 75,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2063.061,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.416843600Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 76,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1407.106,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.755171700Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 77,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2067.647,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.420327500Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 78,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2024.84,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.371626600Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 79,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 318.853,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.666829700Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 80,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1042.031,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.394994700Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 81,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 979.558,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.326877800Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 82,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 561.675,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.913987500Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 83,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2021.095,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 84,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2020.404,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 85,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 132.977,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.480860600Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 86,
+      "status": 201,
+      "class": "success",
+      "code": null,
+      "latency_ms": 39.71,
+      "reservation_id": 35,
+      "body": "{\"id\":35,\"equipmentId\":23,\"requesterId\":1,\"requesterName\":\"林知夏\",\"purpose\":\"correctness N=100 round=3 profile=mysql-redis\",\"startTime\":\"2026-08-18T10:04:31Z\",\"endTime\":\"2026-08-18T11:04:31Z\",\"status\":\"PENDING\",\"createdAt\":\"2026-08-14T07:04:31.369362500Z\",\"expiresAt\":\"2026-08-14T07:19:31.369362500Z\"}"
+    },
+    {
+      "idx": 87,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1815.998,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.164833100Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 88,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 208.541,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.556874300Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 89,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1079.529,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.427282Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 90,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1766.168,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.117452500Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 91,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2023.388,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 92,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 827.222,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.177564600Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 93,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 1251.842,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.600813400Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 94,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2068.881,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.420327500Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 95,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 942.76,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:32.291063600Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    },
+    {
+      "idx": 96,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2019.198,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 97,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2020.286,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 98,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_LOCK_TIMEOUT",
+      "latency_ms": 2020.418,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:33.367618400Z\",\"status\":409,\"code\":\"RESERVATION_LOCK_TIMEOUT\",\"message\":\"预约请求较多，请稍后重试\",\"fields\":{}}"
+    },
+    {
+      "idx": 99,
+      "status": 409,
+      "class": "conflict",
+      "code": "RESERVATION_CONFLICT",
+      "latency_ms": 456.719,
+      "reservation_id": null,
+      "body": "{\"timestamp\":\"2026-08-14T07:04:31.805240700Z\",\"status\":409,\"code\":\"RESERVATION_CONFLICT\",\"message\":\"该设备在所选时间段已有预约\",\"fields\":{}}"
+    }
+  ]
+}

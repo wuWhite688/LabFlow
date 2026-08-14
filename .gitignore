@@ -39,6 +39,13 @@ build/
 *.stdout.log
 *.stderr.log
 
+# 例外：benchmark/ 下的日志不是运行时垃圾，而是压测数字的原始证据，
+# RESULTS.md 里逐条引用了它们的路径。上面两条通配规则会连它们一起排除，
+# 导致提交后报告里的"原始日志"全部指向不存在的文件（本机却看不出问题）。
+# .run/ 下的 pid 仍由上面的 *.pid 继续忽略。
+!benchmark/**/*.stdout.log
+!benchmark/**/*.stderr.log
+
 # local secrets and docker runtime artifacts
 .env
 .verify-logs/

@@ -1,0 +1,29 @@
+{
+  "started_at_utc": "2026-08-14T06:59:35.2695809Z",
+  "finished_at_utc": "2026-08-14T07:05:03.6936901Z",
+  "environments": {
+    "h2-local": {
+      "status": "up",
+      "detail": "Default profile (no spring.profiles.active). H2 mem + LocalReservationLock. port=18080 pid=15744. Suite completed: correctness 50/100/200 x3 + performance 50/100 x500.",
+      "stdout_log": "benchmark/logs/20260814T065933Z-orchestrator.stdout.log",
+      "backend_log": "benchmark/logs/20260814T065933Z-backend-h2.stdout.log",
+      "pid": 15744,
+      "port": 18080,
+      "stopped": true
+    },
+    "mysql-redis": {
+      "status": "up",
+      "detail": "production profile. MySQL 8.4 + RedisReservationLock. port=18080 pid=25684. Redis lock acquired=1792 released=1792. Suite completed. First start-middleware attempt failed because PowerShell Stop treated docker compose stderr progress as an error (see 20260814T070159Z logs); retry with ErrorAction=Continue succeeded.",
+      "stdout_log": "benchmark/logs/20260814T070350Z-start-middleware.stdout.log",
+      "stderr_log": "benchmark/logs/20260814T070350Z-start-middleware.stderr.log",
+      "backend_log": "benchmark/logs/20260814T070350Z-backend-mysql-redis.stdout.log",
+      "first_failed_attempt": "benchmark/logs/20260814T070159Z-start-middleware.stderr.log",
+      "pid": 25684,
+      "port": 18080,
+      "stopped": true
+    }
+  },
+  "bugs": [],
+  "aborted": false,
+  "abort_reason": null
+}
