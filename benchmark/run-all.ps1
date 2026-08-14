@@ -1,4 +1,8 @@
 # Orchestrates real LabFlow reservation benches. Does not modify business code.
+# Each invocation writes only to benchmark/runs/<run-id>/{results,logs} and
+# records that id in benchmark/runs/CURRENT. The published snapshot under
+# benchmark/results, benchmark/logs, and benchmark/RESULTS.md is left untouched.
+# run-id is a filesystem-safe UTC stamp (milliseconds) plus the process id.
 param(
     [int]$BackendPort = 18080,
     [switch]$SkipH2,
@@ -11,13 +15,21 @@ $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location -LiteralPath $root
 
 $benchDir = Join-Path $root "benchmark"
-$resultsDir = Join-Path $benchDir "results"
-$logsDir = Join-Path $benchDir "logs"
+$stamp = [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssfffZ", [Globalization.CultureInfo]::InvariantCulture)
+$ts = "{0}-p{1}" -f $stamp, $PID
+$runRoot = Join-Path $benchDir "runs\$ts"
+$resultsDir = Join-Path $runRoot "results"
+$logsDir = Join-Path $runRoot "logs"
 $pidDir = Join-Path $benchDir ".run"
-New-Item -ItemType Directory -Force -Path $resultsDir, $logsDir, $pidDir | Out-Null
+$runsParent = Join-Path $benchDir "runs"
+New-Item -ItemType Directory -Force -Path $runsParent, $pidDir | Out-Null
+if (Test-Path -LiteralPath $runRoot) {
+    throw "run root already exists: $runRoot"
+}
+New-Item -ItemType Directory -Path $runRoot, $resultsDir, $logsDir | Out-Null
+Set-Content -LiteralPath (Join-Path $benchDir "runs\CURRENT") -Value $ts -NoNewline -Encoding ascii
 
 $env:PYTHONIOENCODING = "utf-8"
-$ts = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
 $orchestratorLog = Join-Path $logsDir "$ts-orchestrator.stdout.log"
 
 function Log {
@@ -73,7 +85,7 @@ $machine = [ordered]@{
     python_version      = ($pyVer | Out-String).Trim()
     python_launcher     = "py -3"
 }
-$machinePath = Join-Path $benchDir "machine.json"
+$machinePath = Join-Path $runRoot "machine.json"
 [System.IO.File]::WriteAllText($machinePath, ($machine | ConvertTo-Json -Depth 6), [System.Text.UTF8Encoding]::new($false))
 Log "Wrote $machinePath"
 
@@ -87,7 +99,7 @@ $runNotes = [ordered]@{
 
 function Save-Notes {
     $runNotes.finished_at_utc = (Get-Date).ToUniversalTime().ToString("o")
-    $notesPath = Join-Path $benchDir "run-notes.json"
+    $notesPath = Join-Path $runRoot "run-notes.json"
     $runNotes | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $notesPath -Encoding utf8
 }
 
@@ -158,9 +170,9 @@ function Start-H2Backend {
     $runNotes.environments["h2-local"] = [ordered]@{
         status      = "up"
         detail      = "Default profile. H2 mem + LocalReservationLock. port=$Port pid=$($proc.Id) jar=$($jar.Name)"
-        stdout_log  = ("benchmark/logs/{0}" -f (Split-Path $stdout -Leaf))
-        stderr_log  = ("benchmark/logs/{0}" -f (Split-Path $stderr -Leaf))
-        backend_log = ("benchmark/logs/{0}" -f (Split-Path $stdout -Leaf))
+        stdout_log  = ("benchmark/runs/{0}/logs/{1}" -f $ts, (Split-Path $stdout -Leaf))
+        stderr_log  = ("benchmark/runs/{0}/logs/{1}" -f $ts, (Split-Path $stderr -Leaf))
+        backend_log = ("benchmark/runs/{0}/logs/{1}" -f $ts, (Split-Path $stdout -Leaf))
         pid         = $proc.Id
         port        = $Port
     }
@@ -225,32 +237,60 @@ function Invoke-ScenarioSuite {
                 Save-Notes
                 throw $runNotes.abort_reason
             }
-            $data = Get-Content -LiteralPath $res.Json -Raw -Encoding utf8 | ConvertFrom-Json
-            if ([int]$data.success_201 -gt 1) {
+            if ($res.ExitCode -ne 0) {
                 $runNotes.aborted = $true
-                $runNotes.abort_reason = "FATAL more than one 201 on $Profile N=$n round=$r success_201=$($data.success_201)"
+                $runNotes.abort_reason = "FATAL correctness command exit=$($res.ExitCode) on $Profile N=$n round=$r"
                 $runNotes.bugs += $runNotes.abort_reason
                 Save-Notes
                 throw $runNotes.abort_reason
             }
-            if ($res.ExitCode -eq 2 -and [int]$data.success_201 -gt 1) {
+            $data = Get-Content -LiteralPath $res.Json -Raw -Encoding utf8 | ConvertFrom-Json
+            if ([int]$data.success_201 -ne 1) {
+                $runNotes.aborted = $true
+                $runNotes.abort_reason = "FATAL correctness expected exactly one 201 on $Profile N=$n round=$r success_201=$($data.success_201)"
+                $runNotes.bugs += $runNotes.abort_reason
+                Save-Notes
                 throw $runNotes.abort_reason
             }
         }
     }
     foreach ($pair in @(@{C=50;T=500}, @{C=100;T=500})) {
-        $null = Invoke-Bench -Scenario performance -Profile $Profile -LockImpl $LockImpl `
+        $res = Invoke-Bench -Scenario performance -Profile $Profile -LockImpl $LockImpl `
             -Concurrency $pair.C -Round 1 -Total $pair.T -Port $Port
+        if ($res.ExitCode -ne 0) {
+            $runNotes.aborted = $true
+            $runNotes.abort_reason = "FATAL performance command exit=$($res.ExitCode) on $Profile c=$($pair.C)"
+            $runNotes.bugs += $runNotes.abort_reason
+            Save-Notes
+            throw $runNotes.abort_reason
+        }
+        if (-not (Test-Path -LiteralPath $res.Json)) {
+            $runNotes.aborted = $true
+            $runNotes.abort_reason = "performance JSON missing for $Profile c=$($pair.C)"
+            Save-Notes
+            throw $runNotes.abort_reason
+        }
+        $data = Get-Content -LiteralPath $res.Json -Raw -Encoding utf8 | ConvertFrom-Json
+        if ([int]$data.success_201 -le 0) {
+            $runNotes.aborted = $true
+            $runNotes.abort_reason = "FATAL performance zero-success on $Profile c=$($pair.C) success_201=$($data.success_201)"
+            $runNotes.bugs += $runNotes.abort_reason
+            Save-Notes
+            throw $runNotes.abort_reason
+        }
     }
 }
 
 function Write-ResultsDoc {
-    $out = Join-Path $benchDir "RESULTS.md"
-    $code = & py -3 (Join-Path $benchDir "write_results.py") --bench-dir $benchDir --out $out
-    if ($LASTEXITCODE -ne 0) { Log "write_results.py exit=$LASTEXITCODE" }
-    Log "RESULTS.md written"
+    $out = Join-Path $runRoot "RESULTS.md"
+    & py -3 (Join-Path $benchDir "write_results.py") --bench-dir $benchDir --source run --run-id $ts --out $out
+    if ($LASTEXITCODE -ne 0) {
+        throw "write_results.py failed with exit=$LASTEXITCODE (curated benchmark/RESULTS.md was not modified)"
+    }
+    Log "Generated report written to $out (published benchmark/RESULTS.md left unchanged)"
 }
 
+$script:benchFailed = $false
 try {
     Log "Orchestrator start root=$root"
     if (-not $SkipBuild) {
@@ -353,9 +393,9 @@ try {
             $runNotes.environments["mysql-redis"] = [ordered]@{
                 status      = "up"
                 detail      = "production profile. MySQL + RedisReservationLock. port=$BackendPort pid=$($prodProc.Id)"
-                stdout_log  = ("benchmark/logs/{0}" -f (Split-Path $mwOut -Leaf))
-                stderr_log  = ("benchmark/logs/{0}" -f (Split-Path $mwErr -Leaf))
-                backend_log = ("benchmark/logs/{0}" -f (Split-Path $prodLog -Leaf))
+                stdout_log  = ("benchmark/runs/{0}/logs/{1}" -f $ts, (Split-Path $mwOut -Leaf))
+                stderr_log  = ("benchmark/runs/{0}/logs/{1}" -f $ts, (Split-Path $mwErr -Leaf))
+                backend_log = ("benchmark/runs/{0}/logs/{1}" -f $ts, (Split-Path $prodLog -Leaf))
                 pid         = $prodProc.Id
                 port        = $BackendPort
             }
@@ -368,9 +408,9 @@ try {
                 $runNotes.environments["mysql-redis"] = [ordered]@{
                     status        = "failed"
                     detail        = "production/Redis 未能跑通：$msg"
-                    stdout_log    = ("benchmark/logs/{0}" -f (Split-Path $mwOut -Leaf))
-                    stderr_log    = ("benchmark/logs/{0}" -f (Split-Path $mwErr -Leaf))
-                    backend_log   = ("benchmark/logs/{0}" -f (Split-Path $prodLog -Leaf))
+                    stdout_log    = ("benchmark/runs/{0}/logs/{1}" -f $ts, (Split-Path $mwOut -Leaf))
+                    stderr_log    = ("benchmark/runs/{0}/logs/{1}" -f $ts, (Split-Path $mwErr -Leaf))
+                    backend_log   = ("benchmark/runs/{0}/logs/{1}" -f $ts, (Split-Path $prodLog -Leaf))
                     error_excerpt = $msg
                 }
             } else {
@@ -384,12 +424,20 @@ try {
             try { & (Join-Path $root "scripts\stop-middleware.ps1") } catch { Log "stop-middleware: $($_.Exception.Message)" }
         }
     }
+} catch {
+    $script:benchFailed = $true
+    throw
 } finally {
     Stop-Tracked (Join-Path $pidDir "backend-h2.pid")
     if (Test-Path (Join-Path $root ".runtime\backend-production.pid")) {
         try { & (Join-Path $root "scripts\stop-production.ps1") } catch {}
     }
     Save-Notes
-    try { Write-ResultsDoc } catch { Log "write results failed: $($_.Exception.Message)" }
+    try {
+        Write-ResultsDoc
+    } catch {
+        Log "write results failed: $($_.Exception.Message)"
+        if (-not $script:benchFailed) { throw }
+    }
     Log "Orchestrator finished"
 }

@@ -47,6 +47,11 @@ build/
 !benchmark/**/*.stderr.log
 # 压测运行期的 PID 与进程标记仍然不提交
 benchmark/.run/
+# Isolated reruns. The published snapshot stays in benchmark/results and
+# benchmark/logs; a new run-all.ps1 invocation must not mix into it.
+benchmark/runs/
+__pycache__/
+*.pyc
 
 # local secrets and docker runtime artifacts
 .env

@@ -56,7 +56,7 @@ Java HotSpot(TM) 64-Bit Server VM (build 25.0.2+10-LTS-69, mixed mode, sharing)
 - 中间件：WSL Ubuntu 内 Docker Engine（Windows PATH 无 `docker`）。`docker compose up -d` 后 mysql / redis / rabbitmq 均 `healthy`。
 - 启动：`java -jar … --spring.profiles.active=production --server.port=18080`
 - 日志原文：`The following 1 profile is active: "production"`；Flyway 连上 `MySQL 8.4`；Hikari 拿到 `com.mysql.cj.jdbc.ConnectionImpl`。
-- Redis 锁证据：后端日志中 `Redis reservation lock acquired` **1792** 次，`released` **1792** 次（与「拿到锁后进入临界区」的请求数一致；`RESERVATION_LOCK_TIMEOUT` 的请求不会打 acquired）。
+- Redis 锁日志：后端日志中 `Redis reservation lock acquired` **1792** 次，`released` **1792** 次。这 1792 次等于 1790 条进入临界区的已记录请求 + 2 次显式 warmup，统计的是日志尝试次数，**不能**据此证明租约未泄漏，也不能证明 Lua 删除成功（当时的实现在未检查 Lua 返回值的情况下记录 `released`）。
 - 中间件 / 编排 / 后端日志：
   - `benchmark/logs/20260814T070350Z-start-middleware.stdout.log`
   - `benchmark/logs/20260814T070350Z-orchestrator.stdout.log`
@@ -171,8 +171,15 @@ Java HotSpot(TM) 64-Bit Server VM (build 25.0.2+10-LTS-69, mixed mode, sharing)
 # 仅 production / RedisReservationLock（需 WSL Docker）
 .\benchmark\run-all.ps1 -SkipH2
 
-# 汇总 RESULTS.md（读取 benchmark/results/*.json）
-py -3 .\benchmark\write_results.py --bench-dir .\benchmark --out .\benchmark\RESULTS.md
+# 新的一次编排写到 benchmark/runs/<run-id>/，并更新 runs/CURRENT。
+# run-id 由 UTC 毫秒时间戳与进程 id 组成，不会复用已有目录。
+# 不会改写已提交的 benchmark/results、benchmark/logs 或本文件。
+
+# 根据已提交的 published snapshot 生成一份独立报告（默认拒绝覆盖本文件）
+py -3 .\benchmark\write_results.py --bench-dir .\benchmark --source published --out .\benchmark\RESULTS.generated.md
+
+# 根据最近一次隔离 rerun 生成报告
+py -3 .\benchmark\write_results.py --bench-dir .\benchmark --source run --run-id <run-id> --out .\benchmark\runs\<run-id>\RESULTS.md
 ```
 
 单次场景：
@@ -200,4 +207,6 @@ py -3 .\benchmark\bench_reservation.py `
 
 后端与编排原始日志：`benchmark/logs/`（文件名带场景/profile 和时间戳）。
 
-复核：打开对应 JSON 看 `success_201` / `conflict_409` / `latency_all` / `throughput_rps` / `error_code_counts`，再对照同名 `.stdout.log`、`.jsonl` 和后端 `Redis reservation lock acquired` 行。
+复核：打开对应 JSON 看 `success_201` / `conflict_409` / `latency_all` / `throughput_rps` / `error_code_counts`，再对照同名 `.stdout.log`、`.jsonl` 和后端锁日志。`acquired` / `released` 行数只是释放尝试次数，不能单独当作 Lua 删除成功或无租约泄漏的证明。
+
+选择逻辑的自动化测试：`py -3 .\benchmark\test_write_results.py`。

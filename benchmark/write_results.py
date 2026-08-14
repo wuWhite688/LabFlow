@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Assemble benchmark/RESULTS.md from machine.json + result JSON files."""
+"""Assemble a benchmark report from a selected run's JSON files.
+
+Reruns must not mix with the published snapshot under benchmark/results.
+Select a source explicitly, or let auto-resolution use benchmark/runs/CURRENT
+when present and otherwise the published snapshot.
+
+The curated file benchmark/RESULTS.md is not overwritten unless
+--allow-overwrite-curated is passed. Generation is deterministic for a given
+input set: timestamps come from machine.json / run-notes.json, not the clock.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +16,14 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
 from typing import Any
+
+
+CURRENT_POINTER = "CURRENT"
+PUBLISHED_SOURCE = "published"
+RUN_SOURCE = "run"
+AUTO_SOURCE = "auto"
+CURATED_REPORT = "RESULTS.md"
 
 
 def load_json(path: str) -> Any:
@@ -34,34 +49,157 @@ def rel(path: str, root: str) -> str:
         return path.replace("\\", "/")
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--bench-dir", required=True)
-    parser.add_argument("--out", required=True)
-    args = parser.parse_args()
+def read_current_run_id(bench_dir: str) -> str | None:
+    pointer = os.path.join(bench_dir, "runs", CURRENT_POINTER)
+    if not os.path.isfile(pointer):
+        return None
+    with open(pointer, encoding="utf-8") as fh:
+        value = fh.read().strip()
+    return value or None
 
-    bench_dir = os.path.abspath(args.bench_dir)
-    machine_path = os.path.join(bench_dir, "machine.json")
-    notes_path = os.path.join(bench_dir, "run-notes.json")
-    results_dir = os.path.join(bench_dir, "results")
 
-    machine = load_json(machine_path) if os.path.exists(machine_path) else {}
-    notes = load_json(notes_path) if os.path.exists(notes_path) else {}
+def resolve_run_root(bench_dir: str, run_id: str) -> str:
+    return os.path.join(bench_dir, "runs", run_id)
 
+
+def resolve_source(
+    bench_dir: str,
+    source: str = AUTO_SOURCE,
+    run_id: str | None = None,
+    results_dir: str | None = None,
+) -> dict[str, str]:
+    """Return the selected results directory and supporting metadata paths."""
+    bench_dir = os.path.abspath(bench_dir)
+    if results_dir:
+        selected_results = os.path.abspath(results_dir)
+        run_root = os.path.dirname(selected_results)
+        return {
+            "source": "explicit",
+            "run_id": run_id or "",
+            "run_root": run_root,
+            "results_dir": selected_results,
+            "machine_path": _first_existing(
+                os.path.join(run_root, "machine.json"),
+                os.path.join(bench_dir, "machine.json"),
+            ),
+            "notes_path": _first_existing(
+                os.path.join(run_root, "run-notes.json"),
+                os.path.join(bench_dir, "run-notes.json"),
+            ),
+        }
+
+    selected_source = source
+    selected_run_id = run_id
+    if selected_source == AUTO_SOURCE:
+        if selected_run_id:
+            selected_source = RUN_SOURCE
+        else:
+            current = read_current_run_id(bench_dir)
+            if current:
+                selected_source = RUN_SOURCE
+                selected_run_id = current
+            else:
+                selected_source = PUBLISHED_SOURCE
+
+    if selected_source == RUN_SOURCE:
+        if not selected_run_id:
+            raise ValueError("source=run requires --run-id or benchmark/runs/CURRENT")
+        run_root = resolve_run_root(bench_dir, selected_run_id)
+        selected_results = os.path.join(run_root, "results")
+        if not os.path.isdir(selected_results):
+            raise FileNotFoundError(f"run results directory not found: {selected_results}")
+        return {
+            "source": RUN_SOURCE,
+            "run_id": selected_run_id,
+            "run_root": run_root,
+            "results_dir": selected_results,
+            "machine_path": _first_existing(
+                os.path.join(run_root, "machine.json"),
+                os.path.join(bench_dir, "machine.json"),
+            ),
+            "notes_path": _first_existing(
+                os.path.join(run_root, "run-notes.json"),
+                os.path.join(bench_dir, "run-notes.json"),
+            ),
+        }
+
+    if selected_source != PUBLISHED_SOURCE:
+        raise ValueError(f"unknown source: {selected_source}")
+
+    return {
+        "source": PUBLISHED_SOURCE,
+        "run_id": "",
+        "run_root": bench_dir,
+        "results_dir": os.path.join(bench_dir, "results"),
+        "machine_path": os.path.join(bench_dir, "machine.json"),
+        "notes_path": os.path.join(bench_dir, "run-notes.json"),
+    }
+
+
+def _first_existing(*paths: str) -> str:
+    for path in paths:
+        if os.path.isfile(path):
+            return path
+    return paths[0]
+
+
+def load_runs(results_dir: str) -> list[dict[str, Any]]:
     runs: list[dict[str, Any]] = []
-    if os.path.isdir(results_dir):
-        for name in sorted(os.listdir(results_dir)):
-            if name.endswith(".json") and not name.endswith(".meta.json"):
-                path = os.path.join(results_dir, name)
-                data = load_json(path)
-                data["_path"] = path
-                runs.append(data)
+    if not os.path.isdir(results_dir):
+        return runs
+    for name in sorted(os.listdir(results_dir)):
+        if name.endswith(".json") and not name.endswith(".meta.json"):
+            path = os.path.join(results_dir, name)
+            if not os.path.isfile(path):
+                continue
+            data = load_json(path)
+            if not isinstance(data, dict):
+                continue
+            data["_path"] = path
+            runs.append(data)
+    return runs
 
-    generated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def curated_report_path(bench_dir: str) -> str:
+    return os.path.abspath(os.path.join(bench_dir, CURATED_REPORT))
+
+
+def is_curated_report(bench_dir: str, out_path: str) -> bool:
+    return os.path.normcase(os.path.abspath(out_path)) == os.path.normcase(
+        curated_report_path(bench_dir)
+    )
+
+
+def refuse_curated_overwrite(bench_dir: str, out_path: str, allow: bool) -> bool:
+    return is_curated_report(bench_dir, out_path) and os.path.isfile(out_path) and not allow
+
+
+def report_timestamp(machine: dict[str, Any], notes: dict[str, Any]) -> str:
+    for candidate in (
+        machine.get("collected_at_utc"),
+        notes.get("finished_at_utc"),
+        notes.get("started_at_utc"),
+    ):
+        if candidate:
+            return str(candidate).strip()
+    return "unspecified"
+
+
+def render_report(
+    bench_dir: str,
+    selected: dict[str, str],
+    machine: dict[str, Any],
+    notes: dict[str, Any],
+    runs: list[dict[str, Any]],
+) -> str:
+    repo_root = os.path.dirname(bench_dir)
+    generated = report_timestamp(machine, notes)
     lines: list[str] = []
     lines.append("# LabFlow 并发预约压测结果")
     lines.append("")
     lines.append(f"生成时间（UTC）：`{generated}`")
+    lines.append(f"数据来源：`{selected['source']}`"
+                 + (f" / run-id=`{selected['run_id']}`" if selected.get("run_id") else ""))
     lines.append("")
     lines.append("本文档中的**每一个数字都来自本机实际跑出来的原始日志/JSON**。未跑通的场景会明确写失败原因，没有用估算值填空。")
     lines.append("")
@@ -79,8 +217,8 @@ def main() -> int:
     lines.append(f"| 压测客户端 | `benchmark/bench_reservation.py`（stdlib `urllib` + 线程） |")
     lines.append(f"| 默认 profile | H2 in-memory + `labops.reservation-lock.mode=local`（`LocalReservationLock`） |")
     lines.append(f"| production profile | MySQL + Redis + `labops.reservation-lock.mode=redis`（`RedisReservationLock`） |")
-    if machine.get("source"):
-        lines.append(f"| 机器信息原始文件 | `{rel(machine_path, os.path.dirname(bench_dir))}` |")
+    if os.path.isfile(selected["machine_path"]):
+        lines.append(f"| 机器信息原始文件 | `{rel(selected['machine_path'], repo_root)}` |")
     lines.append("")
     if machine.get("java_version_raw"):
         lines.append("Java `-version` 原文：")
@@ -148,9 +286,12 @@ def main() -> int:
                 path = r["_path"]
                 log_path = os.path.splitext(path)[0] + ".stdout.log"
                 if not os.path.exists(log_path):
-                    # stdout may live under logs/
-                    alt = os.path.join(bench_dir, "logs", os.path.basename(path).replace(".json", ".stdout.log"))
-                    log_path = alt if os.path.exists(alt) else log_path
+                    alt = os.path.join(os.path.dirname(path), os.path.basename(path).replace(".json", ".stdout.log"))
+                    published_alt = os.path.join(bench_dir, "logs", os.path.basename(path).replace(".json", ".stdout.log"))
+                    if os.path.exists(alt):
+                        log_path = alt
+                    elif os.path.exists(published_alt):
+                        log_path = published_alt
                 lat = r.get("latency_all") or {}
                 lines.append(
                     "| {n} | {rnd} | {s} | {c} | {f} | {p50} | {p95} | {p99} | {rps} | {wall} | `{json}` | `{log}` |".format(
@@ -164,8 +305,8 @@ def main() -> int:
                         p99=md_num(lat.get("p99_ms")),
                         rps=md_num(r.get("throughput_rps"), 3),
                         wall=md_num(r.get("wall_seconds"), 3),
-                        json=rel(path, os.path.dirname(bench_dir)),
-                        log=rel(log_path, os.path.dirname(bench_dir)),
+                        json=rel(path, repo_root),
+                        log=rel(log_path, repo_root),
                     )
                 )
             lines.append("")
@@ -201,9 +342,12 @@ def main() -> int:
             for r in perf:
                 path = r["_path"]
                 log_path = os.path.splitext(path)[0] + ".stdout.log"
-                alt = os.path.join(bench_dir, "logs", os.path.basename(path).replace(".json", ".stdout.log"))
+                alt = os.path.join(os.path.dirname(path), os.path.basename(path).replace(".json", ".stdout.log"))
+                published_alt = os.path.join(bench_dir, "logs", os.path.basename(path).replace(".json", ".stdout.log"))
                 if not os.path.exists(log_path) and os.path.exists(alt):
                     log_path = alt
+                elif not os.path.exists(log_path) and os.path.exists(published_alt):
+                    log_path = published_alt
                 lat = r.get("latency_all") or {}
                 lines.append(
                     "| {n} | {t} | {s} | {c} | {f} | {p50} | {p95} | {p99} | {rps} | {wall} | `{json}` | `{log}` |".format(
@@ -217,8 +361,8 @@ def main() -> int:
                         p99=md_num(lat.get("p99_ms")),
                         rps=md_num(r.get("throughput_rps"), 3),
                         wall=md_num(r.get("wall_seconds"), 3),
-                        json=rel(path, os.path.dirname(bench_dir)),
-                        log=rel(log_path, os.path.dirname(bench_dir)),
+                        json=rel(path, repo_root),
+                        log=rel(log_path, repo_root),
                     )
                 )
             lines.append("")
@@ -285,15 +429,15 @@ def main() -> int:
     for r in runs:
         if r.get("scenario") == "correctness" and (r.get("success_201") or 0) > 1:
             auto_bugs.append(
-                f"场景 1 `{r.get('profile')}` N={r.get('concurrency')} round={r.get('round')} 出现 {r.get('success_201')} 个 201（期望 1）。原始文件：`{rel(r['_path'], os.path.dirname(bench_dir))}`"
+                f"场景 1 `{r.get('profile')}` N={r.get('concurrency')} round={r.get('round')} 出现 {r.get('success_201')} 个 201（期望 1）。原始文件：`{rel(r['_path'], repo_root)}`"
             )
         if r.get("scenario") == "correctness" and (r.get("success_201") or 0) == 0:
             auto_bugs.append(
-                f"场景 1 `{r.get('profile')}` N={r.get('concurrency')} round={r.get('round')} **0 个 201**（全部被 409/失败吃掉）。原始文件：`{rel(r['_path'], os.path.dirname(bench_dir))}`"
+                f"场景 1 `{r.get('profile')}` N={r.get('concurrency')} round={r.get('round')} **0 个 201**（全部被 409/失败吃掉）。原始文件：`{rel(r['_path'], repo_root)}`"
             )
         if (r.get("failed_other") or 0) > 0:
             auto_bugs.append(
-                f"`{r.get('profile')}` {r.get('scenario')} N={r.get('concurrency')} round={r.get('round')} 出现 {r.get('failed_other')} 个非 201/409 失败，status={r.get('status_counts')} codes={r.get('error_code_counts')}。原始文件：`{rel(r['_path'], os.path.dirname(bench_dir))}`"
+                f"`{r.get('profile')}` {r.get('scenario')} N={r.get('concurrency')} round={r.get('round')} 出现 {r.get('failed_other')} 个非 201/409 失败，status={r.get('status_counts')} codes={r.get('error_code_counts')}。原始文件：`{rel(r['_path'], repo_root)}`"
             )
     all_bugs = bugs + auto_bugs
     if not all_bugs:
@@ -306,20 +450,71 @@ def main() -> int:
 
     lines.append("## 产出文件")
     lines.append("")
+    lines.append("本报告只汇总所选 source 目录中的 JSON，不会把 `benchmark/results` 与 `benchmark/runs/<id>` 混在一起。")
+    lines.append("")
     lines.append("```")
-    for dirpath, _, filenames in os.walk(bench_dir):
-        for name in sorted(filenames):
-            full = os.path.join(dirpath, name)
-            lines.append(rel(full, os.path.dirname(bench_dir)))
+    for name in sorted(os.listdir(selected["results_dir"])) if os.path.isdir(selected["results_dir"]) else []:
+        full = os.path.join(selected["results_dir"], name)
+        if os.path.isfile(full):
+            lines.append(rel(full, repo_root))
     lines.append("```")
     lines.append("")
     lines.append("复核方式：打开对应 JSON 看 `success_201` / `conflict_409` / `latency_all` / `throughput_rps`，再对照同名 `.stdout.log` 与 `.jsonl`。")
     lines.append("")
+    lines.append("匹配的 `acquired` / `released` 日志次数只表示释放**尝试**，不能证明 Lua `DEL` 成功，也不能单独证明租约未泄漏。")
+    lines.append("")
+    return "\n".join(lines)
 
-    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
-    with open(args.out, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines))
-    print(f"WROTE {args.out}")
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--bench-dir", required=True)
+    parser.add_argument("--out", required=True)
+    parser.add_argument(
+        "--source",
+        choices=(AUTO_SOURCE, PUBLISHED_SOURCE, RUN_SOURCE),
+        default=AUTO_SOURCE,
+        help="auto uses runs/CURRENT when present, otherwise the published snapshot",
+    )
+    parser.add_argument("--run-id", default=None)
+    parser.add_argument("--results-dir", default=None)
+    parser.add_argument(
+        "--allow-overwrite-curated",
+        action="store_true",
+        help="required to write onto the committed benchmark/RESULTS.md",
+    )
+    args = parser.parse_args(argv)
+
+    bench_dir = os.path.abspath(args.bench_dir)
+    out_path = os.path.abspath(args.out)
+    try:
+        selected = resolve_source(
+            bench_dir,
+            source=args.source,
+            run_id=args.run_id,
+            results_dir=args.results_dir,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    if refuse_curated_overwrite(bench_dir, out_path, args.allow_overwrite_curated):
+        print(
+            "ERROR: refusing to overwrite curated benchmark/RESULTS.md; "
+            "write to another path or pass --allow-overwrite-curated",
+            file=sys.stderr,
+        )
+        return 2
+
+    machine = load_json(selected["machine_path"]) if os.path.isfile(selected["machine_path"]) else {}
+    notes = load_json(selected["notes_path"]) if os.path.isfile(selected["notes_path"]) else {}
+    runs = load_runs(selected["results_dir"])
+    text = render_report(bench_dir, selected, machine, notes, runs)
+
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+    print(f"WROTE {out_path} source={selected['source']} runs={len(runs)}")
     return 0
 
 

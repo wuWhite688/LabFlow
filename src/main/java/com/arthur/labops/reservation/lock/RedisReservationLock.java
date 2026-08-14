@@ -9,8 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.http.HttpStatus;
@@ -24,12 +24,18 @@ public class RedisReservationLock implements ReservationLock {
 
     private static final Logger log = LoggerFactory.getLogger(RedisReservationLock.class);
 
-    private static final DefaultRedisScript<Long> UNLOCK_SCRIPT = new DefaultRedisScript<>(
+    static final DefaultRedisScript<Long> UNLOCK_SCRIPT = new DefaultRedisScript<>(
             "if redis.call('get', KEYS[1]) == ARGV[1] then "
                     + "return redis.call('del', KEYS[1]) else return 0 end",
             Long.class);
 
-    private final StringRedisTemplate redisTemplate;
+    interface Commands {
+        Boolean setIfAbsent(String key, String token, Duration leaseTime);
+
+        Long unlock(String key, String token);
+    }
+
+    private final Commands commands;
     private final Duration waitTime;
     private final Duration leaseTime;
 
@@ -37,7 +43,11 @@ public class RedisReservationLock implements ReservationLock {
             StringRedisTemplate redisTemplate,
             @Value("${labops.reservation-lock.wait:2s}") Duration waitTime,
             @Value("${labops.reservation-lock.lease:10s}") Duration leaseTime) {
-        this.redisTemplate = redisTemplate;
+        this(new TemplateCommands(redisTemplate), waitTime, leaseTime);
+    }
+
+    RedisReservationLock(Commands commands, Duration waitTime, Duration leaseTime) {
+        this.commands = commands;
         this.waitTime = waitTime;
         this.leaseTime = leaseTime;
     }
@@ -46,24 +56,34 @@ public class RedisReservationLock implements ReservationLock {
     public <T> T execute(Long equipmentId, Supplier<T> action) {
         String key = "labops:reservation:equipment:" + equipmentId;
         String token = UUID.randomUUID().toString();
-        long deadline = System.nanoTime() + waitTime.toNanos();
-        boolean acquired = false;
+        boolean acquired = tryAcquire(key, token);
+
+        if (!acquired) {
+            throw new BusinessException(
+                    "RESERVATION_LOCK_TIMEOUT",
+                    "预约请求较多，请稍后重试",
+                    HttpStatus.CONFLICT);
+        }
+        log.info("Redis reservation lock acquired key={} equipmentId={}", key, equipmentId);
         try {
+            // Database/JPA failures from the supplier must not be translated into Redis 503s.
+            return action.get();
+        } finally {
+            release(key, token, equipmentId);
+        }
+    }
+
+    private boolean tryAcquire(String key, String token) {
+        long deadline = System.nanoTime() + waitTime.toNanos();
+        try {
+            boolean acquired;
             do {
-                acquired = Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(key, token, leaseTime));
+                acquired = Boolean.TRUE.equals(commands.setIfAbsent(key, token, leaseTime));
                 if (!acquired) {
                     pauseBriefly();
                 }
             } while (!acquired && System.nanoTime() < deadline);
-
-            if (!acquired) {
-                throw new BusinessException(
-                        "RESERVATION_LOCK_TIMEOUT",
-                        "预约请求较多，请稍后重试",
-                        HttpStatus.CONFLICT);
-            }
-            log.info("Redis reservation lock acquired key={} equipmentId={}", key, equipmentId);
-            return action.get();
+            return acquired;
         } catch (RedisConnectionFailureException exception) {
             throw new BusinessException(
                     "REDIS_UNAVAILABLE",
@@ -74,15 +94,23 @@ public class RedisReservationLock implements ReservationLock {
                     "REDIS_OPERATION_FAILED",
                     "预约锁操作失败",
                     HttpStatus.SERVICE_UNAVAILABLE);
-        } finally {
-            if (acquired) {
-                try {
-                    redisTemplate.execute(UNLOCK_SCRIPT, Collections.singletonList(key), token);
-                    log.info("Redis reservation lock released key={} equipmentId={}", key, equipmentId);
-                } catch (DataAccessException ignored) {
-                    // 锁带有租约，释放失败时会自动过期，不能覆盖已经完成的业务结果。
-                }
+        }
+    }
+
+    private void release(String key, String token, Long equipmentId) {
+        try {
+            Long result = commands.unlock(key, token);
+            if (Long.valueOf(1L).equals(result)) {
+                log.info("Redis reservation lock released key={} equipmentId={}", key, equipmentId);
+            } else {
+                log.warn(
+                        "Redis reservation lock not released (expired or not owned) key={} equipmentId={} result={}",
+                        key,
+                        equipmentId,
+                        result);
             }
+        } catch (DataAccessException ignored) {
+            // 锁带有租约，释放失败时会自动过期，不能覆盖已经完成的业务结果。
         }
     }
 
@@ -95,6 +123,24 @@ public class RedisReservationLock implements ReservationLock {
                     "RESERVATION_INTERRUPTED",
                     "预约请求被中断",
                     HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    private static final class TemplateCommands implements Commands {
+        private final StringRedisTemplate redisTemplate;
+
+        private TemplateCommands(StringRedisTemplate redisTemplate) {
+            this.redisTemplate = redisTemplate;
+        }
+
+        @Override
+        public Boolean setIfAbsent(String key, String token, Duration leaseTime) {
+            return redisTemplate.opsForValue().setIfAbsent(key, token, leaseTime);
+        }
+
+        @Override
+        public Long unlock(String key, String token) {
+            return redisTemplate.execute(UNLOCK_SCRIPT, Collections.singletonList(key), token);
         }
     }
 }
