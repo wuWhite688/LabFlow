@@ -6,7 +6,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
@@ -120,6 +124,109 @@ class RedisReservationLockTest {
         assertThat(commands.unlockCalls).hasSize(1);
     }
 
+    /**
+     * Invariant: SET NX that stays false until wait expires surfaces
+     * {@code RESERVATION_LOCK_TIMEOUT} 409 and must not DEL a key it never owned.
+     * This does <em>not</em> fall through to {@code PESSIMISTIC_WRITE}; the client
+     * retries. DB still serializes writers that actually enter {@code create}.
+     * CI: in-memory Commands, no Redis.
+     */
+    @Test
+    void waitLoopTimesOutWithoutUnlockingWhenKeyStaysTaken() {
+        RecordingCommands commands = RecordingCommands.alwaysBusy();
+        RedisReservationLock lock = new RedisReservationLock(
+                commands, Duration.ofMillis(80), Duration.ofSeconds(10));
+
+        assertThatThrownBy(() -> lock.execute(7L, () -> "should-not-run"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> {
+                    BusinessException business = (BusinessException) ex;
+                    assertThat(business.getCode()).isEqualTo("RESERVATION_LOCK_TIMEOUT");
+                    assertThat(business.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                });
+        assertThat(commands.acquireCalls.get()).isGreaterThan(1);
+        assertThat(commands.unlockCalls).isEmpty();
+        assertThat(commands.leases).allMatch(lease -> lease.equals(Duration.ofSeconds(10)));
+    }
+
+    /**
+     * Invariant: a contended SET NX is retried until it succeeds, then the action
+     * runs once and unlock uses the same token that won the lock.
+     * CI: in-memory Commands, no Redis.
+     */
+    @Test
+    void retriesSetIfAbsentUntilAcquiredThenUnlocksWithSameToken() {
+        RecordingCommands commands = RecordingCommands.failUntil(2);
+        RedisReservationLock lock = new RedisReservationLock(
+                commands, Duration.ofSeconds(2), Duration.ofMillis(250));
+
+        assertThat(lock.execute(11L, () -> "booked")).isEqualTo("booked");
+        assertThat(commands.acquireCalls.get()).isEqualTo(3);
+        assertThat(commands.unlockCalls).hasSize(1);
+        assertThat(commands.unlockCalls.get(0).token()).isEqualTo(commands.acquireTokens.get(2));
+        assertThat(commands.leases).allMatch(lease -> lease.equals(Duration.ofMillis(250)));
+    }
+
+    /**
+     * Invariant: a successful critical section is not rewritten into a Redis 503
+     * when Lua DEL fails; the lease is left to expire. PESSIMISTIC_WRITE already
+     * committed (or rolled back) independently.
+     * CI: in-memory Commands, no Redis.
+     */
+    @Test
+    void unlockDataAccessExceptionDoesNotHideSuccessfulAction() {
+        RecordingCommands commands = RecordingCommands.unlockThrows(new QueryTimeoutException("lua timeout"));
+        RedisReservationLock lock = newLock(commands);
+
+        assertThat(lock.execute(7L, () -> "committed")).isEqualTo("committed");
+        assertThat(commands.unlockCalls).hasSize(1);
+    }
+
+    /**
+     * Invariant: interrupting the waiter while it is spinning aborts with
+     * {@code RESERVATION_INTERRUPTED} and does not DEL.
+     * CI: in-memory Commands, no Redis.
+     */
+    @Test
+    void interruptDuringLockWaitMapsToReservationInterrupted() throws Exception {
+        RecordingCommands commands = RecordingCommands.alwaysBusy();
+        RedisReservationLock lock = new RedisReservationLock(
+                commands, Duration.ofSeconds(5), Duration.ofSeconds(10));
+        CountDownLatch enteredAcquire = new CountDownLatch(1);
+        commands.onAcquire = enteredAcquire::countDown;
+        AtomicReference<BusinessException> thrown = new AtomicReference<>();
+
+        Thread waiter = new Thread(() -> {
+            try {
+                lock.execute(7L, () -> "should-not-run");
+            } catch (BusinessException exception) {
+                thrown.set(exception);
+            }
+        });
+        waiter.start();
+        assertThat(enteredAcquire.await(2, TimeUnit.SECONDS)).isTrue();
+        waiter.interrupt();
+        waiter.join(TimeUnit.SECONDS.toMillis(2));
+
+        assertThat(waiter.isAlive()).isFalse();
+        assertThat(thrown.get()).isNotNull();
+        assertThat(thrown.get().getCode()).isEqualTo("RESERVATION_INTERRUPTED");
+        assertThat(thrown.get().getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(commands.unlockCalls).isEmpty();
+    }
+
+    /**
+     * Invariant: compare-and-delete Lua must GET the token before DEL so a
+     * stolen or expired key is not deleted.
+     * CI: script constant, no Redis.
+     */
+    @Test
+    void unlockScriptComparesTokenBeforeDelete() {
+        assertThat(RedisReservationLock.UNLOCK_SCRIPT.getScriptAsString())
+                .contains("redis.call('get', KEYS[1]) == ARGV[1]")
+                .contains("redis.call('del', KEYS[1])");
+    }
+
     private static RedisReservationLock newLock(RedisReservationLock.Commands commands) {
         return new RedisReservationLock(commands, Duration.ofSeconds(2), Duration.ofSeconds(10));
     }
@@ -128,6 +235,11 @@ class RedisReservationLockTest {
         private final Supplier<Boolean> acquire;
         private final BiFunction<String, String, Long> unlock;
         private final List<UnlockCall> unlockCalls = new ArrayList<>();
+        private final List<Duration> leases = new ArrayList<>();
+        private final List<String> acquireTokens = new ArrayList<>();
+        private final AtomicInteger acquireCalls = new AtomicInteger();
+        private volatile Runnable onAcquire = () -> {
+        };
 
         private RecordingCommands(Supplier<Boolean> acquire, BiFunction<String, String, Long> unlock) {
             this.acquire = acquire;
@@ -144,8 +256,27 @@ class RedisReservationLockTest {
             }, (key, token) -> 1L);
         }
 
+        static RecordingCommands alwaysBusy() {
+            return new RecordingCommands(() -> false, (key, token) -> 1L);
+        }
+
+        static RecordingCommands failUntil(int failures) {
+            AtomicInteger remaining = new AtomicInteger(failures);
+            return new RecordingCommands(() -> remaining.getAndDecrement() <= 0, (key, token) -> 1L);
+        }
+
+        static RecordingCommands unlockThrows(RuntimeException error) {
+            return new RecordingCommands(() -> true, (key, token) -> {
+                throw error;
+            });
+        }
+
         @Override
         public Boolean setIfAbsent(String key, String token, Duration leaseTime) {
+            acquireCalls.incrementAndGet();
+            acquireTokens.add(token);
+            leases.add(leaseTime);
+            onAcquire.run();
             return acquire.get();
         }
 
