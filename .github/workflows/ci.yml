@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: ["main"]
 
-permissions:
-  contents: write
-
 # 同一分支上新的推送会取消仍在排队的旧运行，避免浪费 runner 时间
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -50,8 +47,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # package.json 的 engines 要求 >=22.13.0
       - name: 准备 Node 22
@@ -60,24 +55,6 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: 修复跨平台 lockfile
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        working-directory: frontend
-        run: npm install --package-lock-only --ignore-scripts
-
-      - name: 提交修复后的 lockfile
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          if git diff --quiet -- frontend/package-lock.json; then
-            echo "package-lock.json already synchronized"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/package-lock.json
-          git commit -m "chore: sync frontend package lock"
-          git push origin HEAD:${{ github.head_ref }}
 
       - name: 安装依赖
         working-directory: frontend
