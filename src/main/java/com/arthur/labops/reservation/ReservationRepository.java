@@ -52,6 +52,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
             select reservation.id from Reservation reservation
             where reservation.status = com.arthur.labops.reservation.ReservationStatus.PENDING
               and reservation.expiresAt <= :now
+            order by reservation.id
             """)
     java.util.List<Long> findOverduePendingIds(@Param("now") Instant now);
 
@@ -73,6 +74,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
     @Query("""
             select distinct reservation.equipment.id from Reservation reservation
             where reservation.status = com.arthur.labops.reservation.ReservationStatus.APPROVED
+            order by reservation.equipment.id
             """)
     java.util.List<Long> findEquipmentIdsWithApprovedReservations();
 }

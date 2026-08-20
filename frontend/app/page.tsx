@@ -220,7 +220,7 @@ export default function Home() {
   async function openCreate(kind: ModalKind) {
     if ((kind === "reservation" || kind === "workorder") && (!equipment || !equipment.content.length)) {
       try {
-        setEquipment(await api<PageData<Equipment>>("/api/equipment?size=100&status=AVAILABLE", accessToken));
+        setEquipment(await api<PageData<Equipment>>("/api/equipment?size=100", accessToken));
       } catch (error) {
         notify(error instanceof Error ? error.message : "设备加载失败", true);
         return;

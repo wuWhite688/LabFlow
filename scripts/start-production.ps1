@@ -5,7 +5,8 @@ param(
     [switch]$SkipBuild,
     [switch]$SkipMiddleware,
     [string]$JavaPath = "",
-    [switch]$AllowInsecureRefreshCookieForLocalHttp
+    [switch]$AllowInsecureRefreshCookieForLocalHttp,
+    [switch]$EnableDemoData
 )
 
 $ErrorActionPreference = "Stop"
@@ -104,11 +105,17 @@ $args = @(
     "-jar", $jar.FullName,
     "--spring.profiles.active=production",
     "--server.port=$ServerPort",
+    "--server.address=127.0.0.1",
     "--logging.file.name=$logFile"
 )
 if ($AllowInsecureRefreshCookieForLocalHttp) {
     Write-Warning "Refresh Cookie Secure=false for this local HTTP process only. Do not use this switch for HTTPS deployments."
     $args += "--labops.jwt.refresh-cookie-secure=false"
+}
+if ($EnableDemoData) {
+    Write-Warning "Demo users/data enabled for this process only."
+    $args += "--labops.demo-users.enabled=true"
+    $args += "--labops.demo-data.enabled=true"
 }
 if ($ApprovalTimeout) {
     $args += "--labops.reservation-approval-timeout=$ApprovalTimeout"

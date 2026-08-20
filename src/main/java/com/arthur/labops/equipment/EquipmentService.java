@@ -1,5 +1,8 @@
 package com.arthur.labops.equipment;
 
+import java.util.EnumSet;
+import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -9,22 +12,31 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.arthur.labops.common.BusinessException;
 import com.arthur.labops.audit.AuditLogService;
+import com.arthur.labops.reservation.Reservation;
+import com.arthur.labops.reservation.ReservationRepository;
+import com.arthur.labops.reservation.ReservationStatus;
 import com.arthur.labops.user.CurrentUserService;
 import com.arthur.labops.user.PlatformUser;
 
 @Service
 public class EquipmentService {
 
+    private static final EnumSet<ReservationStatus> OPEN_RESERVATIONS = EnumSet.of(
+            ReservationStatus.PENDING, ReservationStatus.APPROVED);
+
     private final EquipmentRepository equipmentRepository;
+    private final ReservationRepository reservationRepository;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final EquipmentStatusService equipmentStatusService;
 
     public EquipmentService(EquipmentRepository equipmentRepository,
+                            ReservationRepository reservationRepository,
                             CurrentUserService currentUserService,
                             AuditLogService auditLogService,
                             EquipmentStatusService equipmentStatusService) {
         this.equipmentRepository = equipmentRepository;
+        this.reservationRepository = reservationRepository;
         this.currentUserService = currentUserService;
         this.auditLogService = auditLogService;
         this.equipmentStatusService = equipmentStatusService;
@@ -88,6 +100,14 @@ public class EquipmentService {
         }
         if (equipment.getStatus() == EquipmentStatus.MAINTENANCE) {
             throw new BusinessException("EQUIPMENT_IN_MAINTENANCE", "维护中的设备不能退役，请先关闭工单", HttpStatus.CONFLICT);
+        }
+        List<Reservation> open = reservationRepository.findByEquipmentIdAndStatusInForUpdate(
+                id, OPEN_RESERVATIONS);
+        if (!open.isEmpty()) {
+            throw new BusinessException(
+                    "EQUIPMENT_HAS_OPEN_RESERVATIONS",
+                    "存在待审批或已批准的预约，请先取消或完成后再退役",
+                    HttpStatus.CONFLICT);
         }
         equipment.retire();
         auditLogService.record(actor, "EQUIPMENT_RETIRED", "EQUIPMENT", equipment.getId(),

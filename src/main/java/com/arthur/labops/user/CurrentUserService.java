@@ -24,8 +24,12 @@ public class CurrentUserService {
                 || "anonymousUser".equals(authentication.getName())) {
             throw new BusinessException("AUTHENTICATION_REQUIRED", "请先登录", HttpStatus.UNAUTHORIZED);
         }
-        return userRepository.findByUsername(authentication.getName())
+        PlatformUser user = userRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new BusinessException(
                         "CURRENT_USER_NOT_FOUND", "当前登录用户不存在", HttpStatus.UNAUTHORIZED));
+        if (!user.isEnabled()) {
+            throw new BusinessException("USER_DISABLED", "账号已停用", HttpStatus.UNAUTHORIZED);
+        }
+        return user;
     }
 }

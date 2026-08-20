@@ -104,14 +104,21 @@ public class ReservationService {
                     "RESERVATION_EXPIRED", "RESERVATION", reservation.getId(), "审批时发现待审批预约已过期");
             throw new ReservationAlreadyExpiredException();
         }
+        assertTeacherOrAdmin(actor);
+        Equipment equipment = reservation.getEquipment();
         if (request.decision() == ReservationStatus.APPROVED) {
+            if (equipment.getStatus() == EquipmentStatus.MAINTENANCE
+                    || equipment.getStatus() == EquipmentStatus.RETIRED) {
+                throw new BusinessException(
+                        "EQUIPMENT_UNAVAILABLE", "设备当前不可预约", HttpStatus.CONFLICT);
+            }
             assertNoConflict(
-                    reservation.getEquipment().getId(),
+                    equipment.getId(),
                     reservation.getStartTime(),
                     reservation.getEndTime(),
                     reservation.getId());
             reservation.approve();
-            equipmentStatusService.sync(reservation.getEquipment().getId());
+            equipmentStatusService.sync(equipment.getId());
         } else if (request.decision() == ReservationStatus.REJECTED) {
             reservation.reject();
         } else {
@@ -148,6 +155,7 @@ public class ReservationService {
     @Transactional
     public ReservationResponse complete(Long reservationId) {
         PlatformUser actor = currentUserService.getRequiredUser();
+        assertTeacherOrAdmin(actor);
         Reservation reservation = findForStateChange(reservationId);
         if (reservation.getStatus() != ReservationStatus.APPROVED) {
             throw new BusinessException(
@@ -200,6 +208,13 @@ public class ReservationService {
         return reservationRepository.findByIdForUpdate(reservationId)
                 .orElseThrow(() -> new BusinessException(
                         "RESERVATION_NOT_FOUND", "预约不存在", HttpStatus.NOT_FOUND));
+    }
+
+    private void assertTeacherOrAdmin(PlatformUser actor) {
+        if (actor.getRole() != UserRole.TEACHER && actor.getRole() != UserRole.ADMIN) {
+            throw new BusinessException(
+                    "RESERVATION_DECISION_FORBIDDEN", "当前角色无权审批或完成预约", HttpStatus.FORBIDDEN);
+        }
     }
 
     private void validateTimeWindow(Instant start, Instant end) {

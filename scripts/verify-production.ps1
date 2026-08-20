@@ -57,7 +57,8 @@ if (-not $SkipStart) {
         -ProjectRoot $ProjectRoot `
         -ServerPort $ServerPort `
         -ApprovalTimeout "12s" `
-        -AllowInsecureRefreshCookieForLocalHttp
+        -AllowInsecureRefreshCookieForLocalHttp `
+        -EnableDemoData
 }
 
 # 1) Health (authenticated to see component details)

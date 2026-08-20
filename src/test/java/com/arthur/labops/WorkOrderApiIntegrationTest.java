@@ -40,25 +40,33 @@ class WorkOrderApiIntegrationTest {
     void workOrderLifecycleBlocksThenRestoresReservations() throws Exception {
         Long equipmentId = createEquipment("LASER-001");
         Long workOrderId = createWorkOrder(equipmentId);
-
+        Long technicianId = technicianId("technician", "tech123");
         Instant start = Instant.now().plus(2, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+
         mockMvc.perform(post("/api/reservations")
                         .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "student", "student123"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(reservation(equipmentId, start, start.plus(1, ChronoUnit.HOURS))))
+                .andExpect(status().isCreated());
+
+        transitionAs("admin", "admin123", workOrderId, "ASSIGNED", technicianId, "ASSIGNED");
+        Instant later = start.plus(3, ChronoUnit.HOURS);
+        mockMvc.perform(post("/api/reservations")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "student", "student123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reservation(equipmentId, later, later.plus(1, ChronoUnit.HOURS))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("EQUIPMENT_UNAVAILABLE"));
 
-        Long technicianId = technicianId("technician", "tech123");
-        transitionAs("admin", "admin123", workOrderId, "ASSIGNED", technicianId, "ASSIGNED");
         transitionAs("technician", "tech123", workOrderId, "IN_PROGRESS", null, "IN_PROGRESS");
         transitionAs("technician", "tech123", workOrderId, "RESOLVED", null, "RESOLVED");
         transitionAs("technician", "tech123", workOrderId, "CLOSED", null, "CLOSED");
 
+        Instant afterRepair = start.plus(6, ChronoUnit.HOURS);
         mockMvc.perform(post("/api/reservations")
                         .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "student", "student123"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(reservation(equipmentId, start, start.plus(1, ChronoUnit.HOURS))))
+                        .content(reservation(equipmentId, afterRepair, afterRepair.plus(1, ChronoUnit.HOURS))))
                 .andExpect(status().isCreated());
     }
 

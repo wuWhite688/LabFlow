@@ -88,7 +88,7 @@ class BusinessRulesIntegrationTest {
                         .param("keyword", "RULE-002")
                         .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "admin", "admin123")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].status").value("MAINTENANCE"));
+                .andExpect(jsonPath("$.content[0].status").value("AVAILABLE"));
 
         Long workOrderId = latestWorkOrderId();
         Long studentId = userId("student", "student123");
@@ -122,6 +122,69 @@ class BusinessRulesIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ASSIGNED"))
                 .andExpect(jsonPath("$.assigneeId").value(technicianId));
+
+        mockMvc.perform(get("/api/equipment")
+                        .param("keyword", "RULE-002")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "admin", "admin123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].status").value("MAINTENANCE"));
+    }
+
+    @Test
+    void studentWorkOrderDoesNotCancelOthersApprovedReservationsUntilAccepted() throws Exception {
+        Long equipmentId = createEquipment("RULE-004");
+        Instant start = Instant.now().plus(4, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        Long teacherReservationId = createReservationAs("teacher", "teacher123", equipmentId, start, "教师占用");
+
+        mockMvc.perform(patch("/api/reservations/{id}/decision", teacherReservationId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "admin", "admin123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"APPROVED\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/work-orders")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "student", "student123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "equipmentId", equipmentId,
+                                "title", "灯闪",
+                                "description", "学生报修不应直接清掉他人已批准预约",
+                                "priority", "MEDIUM"))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/reservations")
+                        .param("status", "APPROVED")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "admin", "admin123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id==" + teacherReservationId + ")].status").value("APPROVED"));
+
+        Long workOrderId = latestWorkOrderId();
+        Long technicianId = userId("technician", "tech123");
+        mockMvc.perform(patch("/api/work-orders/{id}/status", workOrderId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "admin", "admin123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "targetStatus", "ASSIGNED",
+                                "assigneeId", technicianId))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/reservations")
+                        .param("status", "CANCELLED")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "admin", "admin123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id==" + teacherReservationId + ")].status").value("CANCELLED"));
+    }
+
+    @Test
+    void retireRejectedWhenOpenReservationsExist() throws Exception {
+        Long equipmentId = createEquipment("RULE-005");
+        Instant start = Instant.now().plus(2, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        createReservation(equipmentId, start, "挡住退役");
+
+        mockMvc.perform(patch("/api/equipment/{id}/retire", equipmentId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "teacher", "teacher123")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EQUIPMENT_HAS_OPEN_RESERVATIONS"));
     }
 
     @Test
@@ -164,8 +227,13 @@ class BusinessRulesIntegrationTest {
     }
 
     private Long createReservation(Long equipmentId, Instant start, String purpose) throws Exception {
+        return createReservationAs("student", "student123", equipmentId, start, purpose);
+    }
+
+    private Long createReservationAs(String username, String password, Long equipmentId, Instant start, String purpose)
+            throws Exception {
         MvcResult result = mockMvc.perform(post("/api/reservations")
-                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "student", "student123"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, username, password))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(reservationBody(equipmentId, start, start.plus(1, ChronoUnit.HOURS), purpose)))
                 .andExpect(status().isCreated())
