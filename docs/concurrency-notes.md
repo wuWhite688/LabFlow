@@ -36,7 +36,15 @@ A Spring Boot integration test installs a Hibernate `StatementInspector` and cap
 2. the work-order path's multi-reservation `FOR UPDATE` query contains an `ORDER BY` on the reservation id;
 3. the expiry compensation job also acquires `Equipment` before `Reservation`.
 
-This avoids relying on a timing-sensitive concurrent deadlock reproduction in CI while still protecting the lock-order invariant at the SQL layer.
+`ReservationAbbaDeadlockConcurrencyTest` runs the live paths at a `CyclicBarrier`:
+
+- approve vs student work-order create on the same equipment
+- complete of the *higher* reservation id vs privileged work-order batch lock (`ORDER BY id`)
+- cancel of the *higher* id vs teacher work-order batch lock
+
+`Future.get(10, SECONDS)` plus `shutdownNow` turns a deadlock into a failed test instead of a hung worker. If lock order reverts to Reservation-then-Equipment, or the batch query drops `ORDER BY id` while the other thread touches the high id first, InnoDB can deadlock and this suite times out.
+
+H2 can verify: both threads return, no 500, and (with `@Version`) no silent lost update. H2 cannot verify MySQL deadlock detection — its lock manager may complete a reversed order without deadlock. A pass on CI H2 is necessary but not sufficient for InnoDB; the SQL inspector remains the CI-stable ORDER BY check.
 
 ### Scope
 
