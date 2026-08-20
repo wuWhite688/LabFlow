@@ -54,7 +54,15 @@ public class RedisReservationLock implements ReservationLock {
 
     @Override
     public <T> T execute(Long equipmentId, Supplier<T> action) {
-        String key = "labops:reservation:equipment:" + equipmentId;
+        return executeKey("labops:reservation:equipment:" + equipmentId, action);
+    }
+
+    @Override
+    public <T> T executeUser(Long userId, Supplier<T> action) {
+        return executeKey("labops:reservation:user:" + userId, action);
+    }
+
+    private <T> T executeKey(String key, Supplier<T> action) {
         String token = UUID.randomUUID().toString();
         boolean acquired = tryAcquire(key, token);
 
@@ -64,12 +72,12 @@ public class RedisReservationLock implements ReservationLock {
                     "预约请求较多，请稍后重试",
                     HttpStatus.CONFLICT);
         }
-        log.info("Redis reservation lock acquired key={} equipmentId={}", key, equipmentId);
+        log.info("Redis reservation lock acquired key={}", key);
         try {
             // Database/JPA failures from the supplier must not be translated into Redis 503s.
             return action.get();
         } finally {
-            release(key, token, equipmentId);
+            release(key, token);
         }
     }
 
@@ -97,16 +105,15 @@ public class RedisReservationLock implements ReservationLock {
         }
     }
 
-    private void release(String key, String token, Long equipmentId) {
+    private void release(String key, String token) {
         try {
             Long result = commands.unlock(key, token);
             if (Long.valueOf(1L).equals(result)) {
-                log.info("Redis reservation lock released key={} equipmentId={}", key, equipmentId);
+                log.info("Redis reservation lock released key={}", key);
             } else {
                 log.warn(
-                        "Redis reservation lock not released (expired or not owned) key={} equipmentId={} result={}",
+                        "Redis reservation lock not released (expired or not owned) key={} result={}",
                         key,
-                        equipmentId,
                         result);
             }
         } catch (DataAccessException ignored) {

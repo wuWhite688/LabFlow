@@ -56,4 +56,12 @@ public class PlatformUser {
     public String getDisplayName() { return displayName; }
     public UserRole getRole() { return role; }
     public boolean isEnabled() { return enabled; }
+
+    public void setRole(UserRole role) {
+        this.role = role;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
 }

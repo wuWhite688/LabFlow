@@ -11,6 +11,9 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.arthur.labops.user.PlatformUser;
+import com.arthur.labops.user.PlatformUserRepository;
+
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -22,9 +25,11 @@ import jakarta.servlet.http.HttpServletResponse;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final PlatformUserRepository userRepository;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, PlatformUserRepository userRepository) {
         this.jwtService = jwtService;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -37,14 +42,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 Claims claims = jwtService.parseAndValidate(token);
                 String username = claims.getSubject();
-                String role = claims.get("role", String.class);
-                if (username != null && role != null) {
-                    var authentication = new UsernamePasswordAuthenticationToken(
-                            username,
-                            null,
-                            List.of(new SimpleGrantedAuthority("ROLE_" + role)));
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                if (username != null) {
+                    PlatformUser user = userRepository.findByUsername(username).orElse(null);
+                    if (user != null && user.isEnabled()) {
+                        var authentication = new UsernamePasswordAuthenticationToken(
+                                user.getUsername(),
+                                null,
+                                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
+                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    } else {
+                        SecurityContextHolder.clearContext();
+                    }
                 }
             } catch (JwtException | IllegalArgumentException ignored) {
                 // Invalid/expired token: leave context empty; security chain will return 401.

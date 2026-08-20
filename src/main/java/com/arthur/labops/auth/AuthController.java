@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
 @RestController
@@ -28,8 +29,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        IssuedAuthSession session = authService.login(request);
+    ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        IssuedAuthSession session = authService.login(request, clientIp(httpRequest));
         return withRefreshCookie(session);
     }
 
@@ -76,5 +77,10 @@ public class AuthController {
                 .secure(jwtProperties.isRefreshCookieSecure())
                 .sameSite("Lax")
                 .path(REFRESH_COOKIE_PATH);
+    }
+
+    static String clientIp(HttpServletRequest request) {
+        String addr = request.getRemoteAddr();
+        return addr == null || addr.isBlank() ? "unknown" : addr;
     }
 }

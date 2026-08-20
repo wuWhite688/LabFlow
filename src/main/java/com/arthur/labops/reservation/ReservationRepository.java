@@ -67,6 +67,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
             @Param("equipmentId") Long equipmentId,
             @Param("statuses") Collection<ReservationStatus> statuses);
 
+    long countByRequesterIdAndStatusIn(Long requesterId, Collection<ReservationStatus> statuses);
+
     long countByStatus(ReservationStatus status);
 
     long countByStartTimeBetween(Instant start, Instant end);

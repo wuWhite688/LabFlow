@@ -1,9 +1,10 @@
 package com.arthur.labops.auth;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 public record LoginRequest(
-        @NotBlank String username,
-        @NotBlank String password
+        @NotBlank @Size(max = 50) String username,
+        @NotBlank @Size(max = 128) String password
 ) {
 }

@@ -28,36 +28,45 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
+    private final LoginAttemptGuard loginAttemptGuard;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public AuthService(AuthenticationManager authenticationManager,
                        PlatformUserRepository userRepository,
                        RefreshTokenRepository refreshTokenRepository,
                        JwtService jwtService,
-                       JwtProperties jwtProperties) {
+                       JwtProperties jwtProperties,
+                       LoginAttemptGuard loginAttemptGuard) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.jwtService = jwtService;
         this.jwtProperties = jwtProperties;
+        this.loginAttemptGuard = loginAttemptGuard;
     }
 
     @Transactional
-    public IssuedAuthSession login(LoginRequest request) {
+    public IssuedAuthSession login(LoginRequest request, String clientIp) {
+        String username = request.username().trim();
+        loginAttemptGuard.assertAllowed(clientIp, username);
         try {
             authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.username().trim(), request.password()));
+                    new UsernamePasswordAuthenticationToken(username, request.password()));
         } catch (BadCredentialsException exception) {
+            loginAttemptGuard.recordFailure(clientIp, username);
             throw new BusinessException("INVALID_CREDENTIALS", "用户名或密码错误", HttpStatus.UNAUTHORIZED);
         } catch (AuthenticationException exception) {
+            loginAttemptGuard.recordFailure(clientIp, username);
             throw new BusinessException("AUTHENTICATION_FAILED", "登录失败", HttpStatus.UNAUTHORIZED);
         }
 
-        PlatformUser user = userRepository.findByUsername(request.username().trim())
+        PlatformUser user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("INVALID_CREDENTIALS", "用户名或密码错误", HttpStatus.UNAUTHORIZED));
         if (!user.isEnabled()) {
+            loginAttemptGuard.recordFailure(clientIp, username);
             throw new BusinessException("USER_DISABLED", "账号已停用", HttpStatus.UNAUTHORIZED);
         }
+        loginAttemptGuard.recordSuccess(clientIp, username);
         return issueTokens(user);
     }
 

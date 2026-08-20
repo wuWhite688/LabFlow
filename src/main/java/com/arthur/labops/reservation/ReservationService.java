@@ -23,6 +23,7 @@ import com.arthur.labops.reservation.expiry.ReservationCreatedEvent;
 import com.arthur.labops.audit.AuditLogService;
 import com.arthur.labops.user.CurrentUserService;
 import com.arthur.labops.user.PlatformUser;
+import com.arthur.labops.user.PlatformUserRepository;
 import com.arthur.labops.user.UserRole;
 
 @Service
@@ -33,26 +34,35 @@ public class ReservationService {
 
     private final EquipmentRepository equipmentRepository;
     private final ReservationRepository reservationRepository;
+    private final PlatformUserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final Duration approvalTimeout;
     private final Duration maxDuration;
+    private final Duration maxAdvance;
+    private final int maxActivePerUser;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final EquipmentStatusService equipmentStatusService;
 
     public ReservationService(EquipmentRepository equipmentRepository,
                               ReservationRepository reservationRepository,
+                              PlatformUserRepository userRepository,
                               ApplicationEventPublisher eventPublisher,
                               @Value("${labops.reservation-approval-timeout:15m}") Duration approvalTimeout,
                               @Value("${labops.reservation-max-duration:12h}") Duration maxDuration,
+                              @Value("${labops.reservation-max-advance:30d}") Duration maxAdvance,
+                              @Value("${labops.reservation-max-active-per-user:20}") int maxActivePerUser,
                               CurrentUserService currentUserService,
                               AuditLogService auditLogService,
                               EquipmentStatusService equipmentStatusService) {
         this.equipmentRepository = equipmentRepository;
         this.reservationRepository = reservationRepository;
+        this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
         this.approvalTimeout = approvalTimeout;
         this.maxDuration = maxDuration;
+        this.maxAdvance = maxAdvance;
+        this.maxActivePerUser = maxActivePerUser;
         this.currentUserService = currentUserService;
         this.auditLogService = auditLogService;
         this.equipmentStatusService = equipmentStatusService;
@@ -61,6 +71,17 @@ public class ReservationService {
     @Transactional
     public ReservationResponse create(CreateReservationRequest request) {
         validateTimeWindow(request.startTime(), request.endTime());
+
+        PlatformUser requester = currentUserService.getRequiredUser();
+        userRepositoryForUpdate(requester.getId());
+        long active = reservationRepository.countByRequesterIdAndStatusIn(
+                requester.getId(), CONFLICTING_STATUSES);
+        if (active >= maxActivePerUser) {
+            throw new BusinessException(
+                    "RESERVATION_QUOTA_EXCEEDED",
+                    "未关闭预约数量已达上限（" + maxActivePerUser + "）",
+                    HttpStatus.CONFLICT);
+        }
 
         Equipment equipment = equipmentRepository.findByIdForUpdate(request.equipmentId())
                 .orElseThrow(() -> new BusinessException(
@@ -73,8 +94,6 @@ public class ReservationService {
         }
 
         assertNoConflict(equipment.getId(), request.startTime(), request.endTime(), null);
-
-        PlatformUser requester = currentUserService.getRequiredUser();
         Instant expiresAt = Instant.now().plus(approvalTimeout);
         Reservation reservation = new Reservation(
                 equipment,
@@ -196,6 +215,12 @@ public class ReservationService {
      * then the reservation row, so concurrent approval/cancel/complete and
      * fault reporting cannot form an Equipment <-> Reservation deadlock cycle.
      */
+    private void userRepositoryForUpdate(Long userId) {
+        userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new BusinessException(
+                        "CURRENT_USER_NOT_FOUND", "当前登录用户不存在", HttpStatus.UNAUTHORIZED));
+    }
+
     private Reservation findForStateChange(Long reservationId) {
         Long equipmentId = reservationRepository.findEquipmentIdById(reservationId)
                 .orElseThrow(() -> new BusinessException(
@@ -229,6 +254,12 @@ public class ReservationService {
             throw new BusinessException(
                     "RESERVATION_START_IN_PAST",
                     "预约开始时间必须晚于当前时间",
+                    HttpStatus.BAD_REQUEST);
+        }
+        if (start.isAfter(now.plus(maxAdvance))) {
+            throw new BusinessException(
+                    "RESERVATION_TOO_FAR_AHEAD",
+                    "预约开始时间不能超过 " + maxAdvance.toDays() + " 天后",
                     HttpStatus.BAD_REQUEST);
         }
         Duration duration = Duration.between(start, end);

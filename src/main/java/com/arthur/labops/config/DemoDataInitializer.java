@@ -31,7 +31,7 @@ import com.arthur.labops.workorder.WorkOrderStatus;
 
 @Component
 @Order(2)
-@ConditionalOnProperty(name = "labops.demo-data.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "labops.demo-data.enabled", havingValue = "true")
 public class DemoDataInitializer implements ApplicationRunner {
 
     private final EquipmentRepository equipmentRepository;

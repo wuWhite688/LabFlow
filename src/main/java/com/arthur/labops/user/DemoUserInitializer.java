@@ -10,7 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @Order(1)
-@ConditionalOnProperty(name = "labops.demo-users.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "labops.demo-users.enabled", havingValue = "true", matchIfMissing = false)
 public class DemoUserInitializer implements ApplicationRunner {
 
     private final PlatformUserRepository userRepository;
