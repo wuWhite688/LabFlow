@@ -35,9 +35,11 @@ public class LoginAttemptGuard {
 
     public void assertAllowed(String clientIp, String username) {
         long now = System.currentTimeMillis();
-        int identityCount = window(identityKey(clientIp, username)).pruneAndCount(now, windowMs);
-        int ipCount = window(ipKey(clientIp)).pruneAndCount(now, windowMs);
-        if (identityCount >= maxPerIdentity || ipCount >= maxPerIp) {
+        evictEmptyWindows(now);
+        // Read existing buckets only. Creating a per-username key here would let
+        // an IP-capped client grow the map by rotating usernames on 429s.
+        if (snapshotCount(ipKey(clientIp), now) >= maxPerIp
+                || snapshotCount(identityKey(clientIp, username), now) >= maxPerIdentity) {
             throw new BusinessException(
                     "LOGIN_RATE_LIMITED",
                     "登录尝试过于频繁，请稍后重试",
@@ -47,20 +49,44 @@ public class LoginAttemptGuard {
 
     public void recordFailure(String clientIp, String username) {
         long now = System.currentTimeMillis();
-        window(identityKey(clientIp, username)).add(now, windowMs);
-        window(ipKey(clientIp)).add(now, windowMs);
+        record(identityKey(clientIp, username), now);
+        record(ipKey(clientIp), now);
     }
 
     public void recordSuccess(String clientIp, String username) {
         windows.remove(identityKey(clientIp, username));
-        AttemptWindow ipWindow = windows.get(ipKey(clientIp));
-        if (ipWindow != null) {
-            ipWindow.decay(System.currentTimeMillis(), windowMs);
-        }
+        windows.computeIfPresent(ipKey(clientIp), (key, window) -> {
+            int remaining = window.decay(System.currentTimeMillis(), windowMs);
+            return remaining == 0 ? null : window;
+        });
     }
 
-    private AttemptWindow window(String key) {
-        return windows.computeIfAbsent(key, ignored -> new AttemptWindow());
+    int windowCount() {
+        return windows.size();
+    }
+
+    private void record(String key, long now) {
+        windows.compute(key, (ignored, existing) -> {
+            AttemptWindow window = existing != null ? existing : new AttemptWindow();
+            window.add(now, windowMs);
+            return window;
+        });
+    }
+
+    private int snapshotCount(String key, long now) {
+        int[] count = {0};
+        windows.computeIfPresent(key, (ignored, window) -> {
+            int remaining = window.pruneAndCount(now, windowMs);
+            count[0] = remaining;
+            return remaining == 0 ? null : window;
+        });
+        return count[0];
+    }
+
+    private void evictEmptyWindows(long now) {
+        for (String key : windows.keySet()) {
+            snapshotCount(key, now);
+        }
     }
 
     static String identityKey(String clientIp, String username) {
@@ -89,11 +115,12 @@ public class LoginAttemptGuard {
             times.addLast(now);
         }
 
-        synchronized void decay(long now, long windowMs) {
+        synchronized int decay(long now, long windowMs) {
             pruneAndCount(now, windowMs);
             if (!times.isEmpty()) {
                 times.pollFirst();
             }
+            return times.size();
         }
     }
 }
