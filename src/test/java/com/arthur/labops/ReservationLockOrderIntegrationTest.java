@@ -43,31 +43,9 @@ class ReservationLockOrderIntegrationTest {
         String student = bearer(mockMvc, objectMapper, "student", "student123");
         String teacher = bearer(mockMvc, objectMapper, "teacher", "teacher123");
 
-        String code = "LOCK-" + UUID.randomUUID().toString().substring(0, 8);
-        MvcResult equipmentResult = mockMvc.perform(post("/api/equipment")
-                        .header(HttpHeaders.AUTHORIZATION, admin)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "code", code,
-                                "name", "锁顺序测试设备",
-                                "category", "并发测试",
-                                "location", "实验楼 L101"))))
-                .andExpect(status().isCreated())
-                .andReturn();
-        Long equipmentId = idFrom(equipmentResult);
-
+        Long equipmentId = createEquipment(admin);
         Instant start = Instant.now().plus(3, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
-        MvcResult reservationResult = mockMvc.perform(post("/api/reservations")
-                        .header(HttpHeaders.AUTHORIZATION, student)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "equipmentId", equipmentId,
-                                "purpose", "验证数据库锁顺序",
-                                "startTime", start.toString(),
-                                "endTime", start.plus(1, ChronoUnit.HOURS).toString()))))
-                .andExpect(status().isCreated())
-                .andReturn();
-        Long reservationId = idFrom(reservationResult);
+        Long reservationId = createReservation(student, equipmentId, start, "验证数据库锁顺序");
 
         SqlCaptureStatementInspector.clear();
         mockMvc.perform(patch("/api/reservations/{id}/decision", reservationId)
@@ -91,6 +69,72 @@ class ReservationLockOrderIntegrationTest {
         assertThat(equipmentLock)
                 .as("lock order must stay Equipment -> Reservation to match work-order creation; SQL=%s", sql)
                 .isLessThan(reservationLock);
+    }
+
+    @Test
+    void workOrderLocksMultipleReservationsInPrimaryKeyOrder() throws Exception {
+        TestAuth.clearCache();
+        String admin = bearer(mockMvc, objectMapper, "admin", "admin123");
+        String student = bearer(mockMvc, objectMapper, "student", "student123");
+
+        Long equipmentId = createEquipment(admin);
+        Instant firstStart = Instant.now().plus(4, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        createReservation(student, equipmentId, firstStart, "第一条待取消预约");
+        createReservation(student, equipmentId, firstStart.plus(3, ChronoUnit.HOURS), "第二条待取消预约");
+
+        SqlCaptureStatementInspector.clear();
+        mockMvc.perform(post("/api/work-orders")
+                        .header(HttpHeaders.AUTHORIZATION, student)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "equipmentId", equipmentId,
+                                "title", "锁顺序测试故障",
+                                "description", "验证批量预约悲观锁按主键排序",
+                                "priority", "HIGH"))))
+                .andExpect(status().isCreated());
+
+        List<String> sql = SqlCaptureStatementInspector.snapshot();
+        String batchReservationLock = sql.stream()
+                .filter(statement -> statement.contains(" from equipment_reservations "))
+                .filter(statement -> statement.contains(" for update"))
+                .filter(statement -> statement.contains(" order by "))
+                .findFirst()
+                .orElse("");
+
+        assertThat(batchReservationLock)
+                .as("batch reservation lock must keep an ORDER BY primary-key clause; SQL=%s", sql)
+                .isNotBlank()
+                .contains(" order by ")
+                .contains(".id");
+    }
+
+    private Long createEquipment(String admin) throws Exception {
+        String code = "LOCK-" + UUID.randomUUID().toString().substring(0, 8);
+        MvcResult equipmentResult = mockMvc.perform(post("/api/equipment")
+                        .header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "code", code,
+                                "name", "锁顺序测试设备",
+                                "category", "并发测试",
+                                "location", "实验楼 L101"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return idFrom(equipmentResult);
+    }
+
+    private Long createReservation(String student, Long equipmentId, Instant start, String purpose) throws Exception {
+        MvcResult reservationResult = mockMvc.perform(post("/api/reservations")
+                        .header(HttpHeaders.AUTHORIZATION, student)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "equipmentId", equipmentId,
+                                "purpose", purpose,
+                                "startTime", start.toString(),
+                                "endTime", start.plus(1, ChronoUnit.HOURS).toString()))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return idFrom(reservationResult);
     }
 
     private int firstIndex(List<String> values, Predicate<String> predicate) {
