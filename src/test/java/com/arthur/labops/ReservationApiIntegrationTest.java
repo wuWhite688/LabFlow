@@ -65,8 +65,8 @@ class ReservationApiIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "student", "student123"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(reservation(equipmentId, start.plus(30, ChronoUnit.MINUTES), end)))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("RESERVATION_CONFLICT"));
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"));
 
         mockMvc.perform(post("/api/reservations")
                         .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "student", "student123"))

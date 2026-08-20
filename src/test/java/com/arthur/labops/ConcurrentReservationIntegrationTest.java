@@ -39,7 +39,7 @@ class ConcurrentReservationIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    void onlyOneOfTwoConcurrentOverlappingRequestsSucceeds() throws Exception {
+    void concurrentOverlappingCreatesBothStayPending() throws Exception {
         Long equipmentId = createEquipment();
         Instant start = Instant.now().plus(3, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
         String body = objectMapper.writeValueAsString(Map.of(
@@ -60,7 +60,7 @@ class ConcurrentReservationIntegrationTest {
             List<Integer> statuses = List.of(
                     getOrTimeout(first, "overlapping create first"),
                     getOrTimeout(second, "overlapping create second"));
-            assertThat(statuses).containsExactlyInAnyOrder(201, 409);
+            assertThat(statuses).containsExactly(201, 201);
         } finally {
             executor.shutdownNow();
             if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {

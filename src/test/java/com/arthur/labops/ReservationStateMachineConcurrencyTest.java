@@ -150,11 +150,9 @@ class ReservationStateMachineConcurrencyTest {
 
     /**
      * Invariant: overlapping PENDING rows cannot both become APPROVED.
-     * Trigger: insert two overlapping PENDING rows (bypassing create lock), then
-     * two teachers approve them at the same barrier.
-     * Note: {@code decide} treats the other PENDING as a conflict, so both approvals
-     * may 409 and both rows stay PENDING — still not a double-book. Failure is
-     * {@code approved == 2}.
+     * Trigger: insert two overlapping PENDING rows, then two teachers approve them
+     * at the same barrier. Occupied-slot checks only see APPROVED, so exactly one
+     * approval commits; the other gets 409.
      */
     @Test
     void concurrentApproveOfOverlappingPendingLeavesSingleApproved() throws Exception {
@@ -176,18 +174,16 @@ class ReservationStateMachineConcurrencyTest {
                 return decideStatus(second.getId(), "APPROVED", admin);
             });
 
-            left.get(10, TimeUnit.SECONDS);
-            right.get(10, TimeUnit.SECONDS);
+            List<Integer> statuses = List.of(left.get(10, TimeUnit.SECONDS), right.get(10, TimeUnit.SECONDS));
+            assertThat(statuses.stream().filter(code -> code == 200).count()).isEqualTo(1);
+            assertThat(statuses).contains(409);
         }
 
         List<ReservationStatus> stored = List.of(
                 reservationRepository.findById(first.getId()).orElseThrow().getStatus(),
                 reservationRepository.findById(second.getId()).orElseThrow().getStatus());
-        long approved = stored.stream().filter(status -> status == ReservationStatus.APPROVED).count();
-        assertThat(approved)
-                .as("overlapping PENDING rows must never both become APPROVED; both staying PENDING "
-                        + "is the current decide() rule because PENDING is itself a conflicting status")
-                .isLessThanOrEqualTo(1);
+        assertThat(stored.stream().filter(status -> status == ReservationStatus.APPROVED).count())
+                .isEqualTo(1);
         assertThat(stored).allMatch(status ->
                 status == ReservationStatus.APPROVED || status == ReservationStatus.PENDING);
     }
@@ -261,13 +257,12 @@ class ReservationStateMachineConcurrencyTest {
     }
 
     /**
-     * Invariant: N concurrent identical overlapping creates yield exactly one 201.
+     * Invariant: overlapping PENDING creates are allowed; the equipment lock must
+     * not invent a conflict or hang.
      * Trigger: three POSTs of the same window after a single CyclicBarrier.
-     * Failure: create lock does not cover the insert transaction, or conflict check
-     * uses a snapshot from before the winner committed.
      */
     @Test
-    void threeConcurrentIdenticalCreatesYieldSingleSuccess() throws Exception {
+    void threeConcurrentIdenticalCreatesAllStayPending() throws Exception {
         Long equipmentId = createEquipment("triple");
         Instant startTime = Instant.now().plus(9, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
         String body = reservationJson(equipmentId, startTime, startTime.plus(2, ChronoUnit.HOURS), "三路并发");
@@ -283,8 +278,7 @@ class ReservationStateMachineConcurrencyTest {
                     results.get(0).get(10, TimeUnit.SECONDS),
                     results.get(1).get(10, TimeUnit.SECONDS),
                     results.get(2).get(10, TimeUnit.SECONDS));
-            assertThat(statuses.stream().filter(code -> code == 201).count()).isEqualTo(1);
-            assertThat(statuses.stream().filter(code -> code == 409).count()).isEqualTo(2);
+            assertThat(statuses.stream().filter(code -> code == 201).count()).isEqualTo(3);
         }
     }
 
@@ -293,7 +287,7 @@ class ReservationStateMachineConcurrencyTest {
      * slot can be booked again. COMPLETED/PENDING cannot be re-approved.
      * Trigger: sequential legal then illegal transitions on one row, then a new create
      * on the freed slot.
-     * Failure: {@code CONFLICTING_STATUSES} still includes REJECTED/EXPIRED/CANCELLED,
+     * Failure: occupied-slot checks still include REJECTED/EXPIRED/CANCELLED,
      * or {@code decide}/{@code complete}/{@code cancel} skip the current-status guard.
      */
     @Test

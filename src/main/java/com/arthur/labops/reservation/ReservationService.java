@@ -29,8 +29,12 @@ import com.arthur.labops.user.UserRole;
 @Service
 public class ReservationService {
 
-    private static final Set<ReservationStatus> CONFLICTING_STATUSES =
+    private static final Set<ReservationStatus> QUOTA_STATUSES =
             EnumSet.of(ReservationStatus.PENDING, ReservationStatus.APPROVED);
+
+    /** Approved rows occupy the calendar slot. Overlapping PENDING requests may coexist. */
+    private static final Set<ReservationStatus> OCCUPIED_STATUSES =
+            EnumSet.of(ReservationStatus.APPROVED);
 
     private final EquipmentRepository equipmentRepository;
     private final ReservationRepository reservationRepository;
@@ -75,7 +79,7 @@ public class ReservationService {
         PlatformUser requester = currentUserService.getRequiredUser();
         userRepositoryForUpdate(requester.getId());
         long active = reservationRepository.countByRequesterIdAndStatusIn(
-                requester.getId(), CONFLICTING_STATUSES);
+                requester.getId(), QUOTA_STATUSES);
         if (active >= maxActivePerUser) {
             throw new BusinessException(
                     "RESERVATION_QUOTA_EXCEEDED",
@@ -274,9 +278,9 @@ public class ReservationService {
     private void assertNoConflict(Long equipmentId, Instant start, Instant end, Long excludeId) {
         boolean conflict = excludeId == null
                 ? reservationRepository.existsByEquipmentIdAndStatusInAndStartTimeLessThanAndEndTimeGreaterThan(
-                        equipmentId, CONFLICTING_STATUSES, end, start)
+                        equipmentId, OCCUPIED_STATUSES, end, start)
                 : reservationRepository.existsConflictExcludingId(
-                        equipmentId, CONFLICTING_STATUSES, end, start, excludeId);
+                        equipmentId, OCCUPIED_STATUSES, end, start, excludeId);
         if (conflict) {
             throw new BusinessException(
                     "RESERVATION_CONFLICT",
