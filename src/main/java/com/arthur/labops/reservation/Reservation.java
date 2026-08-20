@@ -15,6 +15,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 @Entity
 @Table(name = "equipment_reservations")
@@ -53,6 +54,14 @@ public class Reservation {
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
+    /**
+     * Second-line lost-update detection. PESSIMISTIC_WRITE on state changes remains
+     * the primary correctness guarantee; {@code @Version} makes concurrent writers
+     * fail on any database, including H2 where {@code FOR UPDATE} does not serialize.
+     */
+    @Version
+    private long version;
+
     protected Reservation() {
     }
 
@@ -79,6 +88,7 @@ public class Reservation {
     public ReservationStatus getStatus() { return status; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getExpiresAt() { return expiresAt; }
+    public long getVersion() { return version; }
 
     public void approve() {
         status = ReservationStatus.APPROVED;

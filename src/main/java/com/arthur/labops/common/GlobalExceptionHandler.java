@@ -7,13 +7,17 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import jakarta.persistence.OptimisticLockException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -68,9 +72,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
-    @ExceptionHandler(PessimisticLockingFailureException.class)
-    ResponseEntity<ApiError> handleLockFailure(PessimisticLockingFailureException exception) {
-        log.warn("Pessimistic lock failure", exception);
+    /**
+     * PESSIMISTIC_WRITE timeouts and {@code @Version} lost updates both become 409.
+     * Reservation writers: decide, cancel, complete, expiry, work-order cancellation.
+     * Work-order writers: claim, transition. Spring wraps Hibernate stale-state as
+     * {@link ObjectOptimisticLockingFailureException}; a raw JPA
+     * {@link OptimisticLockException} is mapped the same way if it reaches MVC.
+     */
+    @ExceptionHandler({
+            PessimisticLockingFailureException.class,
+            OptimisticLockingFailureException.class,
+            ObjectOptimisticLockingFailureException.class,
+            OptimisticLockException.class
+    })
+    ResponseEntity<ApiError> handleLockFailure(RuntimeException exception) {
+        log.warn("Lock failure", exception);
         ApiError body = new ApiError(
                 Instant.now(),
                 HttpStatus.CONFLICT.value(),
