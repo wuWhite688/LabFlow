@@ -60,6 +60,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
             select reservation from Reservation reservation
             where reservation.equipment.id = :equipmentId
               and reservation.status in :statuses
+            order by reservation.id
             """)
     java.util.List<Reservation> findByEquipmentIdAndStatusInForUpdate(
             @Param("equipmentId") Long equipmentId,
