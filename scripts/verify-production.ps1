@@ -150,10 +150,11 @@ if ($reuseStatus -ne 401) {
 }
 Log "PASS old refresh token rejected with 401"
 
-# 3) Redis lock evidence via concurrent reservation
-Log "--- 3) Redis reservation lock concurrent create ---"
+# 3) Overlapping PENDING creates succeed; concurrent APPROVE allows only one winner
+Log "--- 3) Overlapping PENDING create + concurrent approve ---"
 $adminAuth = JwtAuth "admin" "admin123"
 $studentAuth = JwtAuth "student" "student123"
+$teacherAuth = JwtAuth "teacher" "teacher123"
 $code = "DOCKER-" + (Get-Random -Maximum 999999)
 $equipment = Invoke-Json -Method POST -Url "http://127.0.0.1:$ServerPort/api/equipment" -Auth $adminAuth -Body @{
     code = $code
@@ -166,35 +167,26 @@ Log "Created equipment id=$equipmentId code=$code"
 
 $start = (Get-Date).ToUniversalTime().AddDays(5).ToString("yyyy-MM-ddTHH:mm:ssZ")
 $end = (Get-Date).ToUniversalTime().AddDays(5).AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ")
-$bodyJson = (@{
+$startOverlap = (Get-Date).ToUniversalTime().AddDays(5).AddMinutes(30).ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+$first = Invoke-Json -Method POST -Url "http://127.0.0.1:$ServerPort/api/reservations" -Auth $studentAuth -Body @{
     equipmentId = $equipmentId
-    purpose = "Redis-lock-concurrent-verify"
+    purpose = "Overlap-pending-A"
     startTime = $start
     endTime = $end
-} | ConvertTo-Json -Compress)
-
-$jobs = 1..2 | ForEach-Object {
-    Start-Job -ScriptBlock {
-        param($url, $auth, $json)
-        try {
-            $resp = Invoke-WebRequest -Method POST -Uri $url -Headers @{ Authorization = $auth; "Content-Type" = "application/json" } -Body $json -UseBasicParsing
-            return [int]$resp.StatusCode
-        } catch {
-            if ($_.Exception.Response) {
-                return [int]$_.Exception.Response.StatusCode.value__
-            }
-            return -1
-        }
-    } -ArgumentList "http://127.0.0.1:$ServerPort/api/reservations", $studentAuth, $bodyJson
 }
-$statuses = @($jobs | ForEach-Object { Receive-Job -Job $_ -Wait })
-$jobs | Remove-Job -Force
-Log ("Concurrent reservation HTTP statuses: " + ($statuses -join ", "))
-$has201 = $statuses -contains 201
-$has409 = $statuses -contains 409
-if (-not ($has201 -and $has409)) {
-    throw "Expected concurrent reservation statuses {201,409}, got {$($statuses -join ',')}"
+$second = Invoke-Json -Method POST -Url "http://127.0.0.1:$ServerPort/api/reservations" -Auth $studentAuth -Body @{
+    equipmentId = $equipmentId
+    purpose = "Overlap-pending-B"
+    startTime = $startOverlap
+    endTime = $end
 }
+if ($first.status -ne "PENDING" -or $second.status -ne "PENDING") {
+    throw "Expected both overlapping creates to stay PENDING, got $($first.status) / $($second.status)"
+}
+$firstId = [int64]$first.id
+$secondId = [int64]$second.id
+Log "Created overlapping PENDING ids=$firstId,$secondId"
 
 $backendLog = Join-Path $ProjectRoot ".runtime\backend-production.log"
 if (-not (Test-Path -LiteralPath $backendLog)) {
@@ -206,7 +198,43 @@ if ($redisLogHit.Count -lt 1) {
 }
 Log "Redis lock log samples:"
 $redisLogHit | ForEach-Object { Log $_.Line }
-Log "PASS Redis lock used for concurrent reservation"
+Log "PASS overlapping PENDING creates succeeded; Redis lock used"
+
+$approveJson = '{"decision":"APPROVED"}'
+$approveJobs = @(
+    @{ Id = $firstId; Auth = $teacherAuth },
+    @{ Id = $secondId; Auth = $adminAuth }
+) | ForEach-Object {
+    Start-Job -ScriptBlock {
+        param($url, $auth, $json)
+        try {
+            $resp = Invoke-WebRequest -Method PATCH -Uri $url -Headers @{ Authorization = $auth; "Content-Type" = "application/json" } -Body $json -UseBasicParsing
+            return [int]$resp.StatusCode
+        } catch {
+            if ($_.Exception.Response) {
+                return [int]$_.Exception.Response.StatusCode.value__
+            }
+            return -1
+        }
+    } -ArgumentList "http://127.0.0.1:$ServerPort/api/reservations/$($_.Id)/decision", $_.Auth, $approveJson
+}
+$approveStatuses = @($approveJobs | ForEach-Object { Receive-Job -Job $_ -Wait })
+$approveJobs | Remove-Job -Force
+Log ("Concurrent approve HTTP statuses: " + ($approveStatuses -join ", "))
+$approveOk = @($approveStatuses | Where-Object { $_ -eq 200 }).Count
+$approveConflict = @($approveStatuses | Where-Object { $_ -eq 409 }).Count
+if ($approveOk -ne 1 -or $approveConflict -ne 1) {
+    throw "Expected concurrent approve statuses {200,409}, got {$($approveStatuses -join ',')}"
+}
+
+$page = Invoke-Json -Method GET -Url "http://127.0.0.1:$ServerPort/api/reservations?size=100" -Auth $adminAuth
+$final = @($page.content | Where-Object { $_.id -eq $firstId -or $_.id -eq $secondId })
+$approvedCount = @($final | Where-Object { $_.status -eq "APPROVED" }).Count
+Log ("Final overlapping statuses: " + (($final | ForEach-Object { "$($_.id)=$($_.status)" }) -join ", "))
+if ($approvedCount -ne 1) {
+    throw "Expected exactly one APPROVED overlapping reservation, got $approvedCount"
+}
+Log "PASS concurrent approve of overlapping PENDING yielded exactly one APPROVED"
 
 # 4) RabbitMQ delayed expiry path (per-reservation delay queue, no shared FIFO HOL)
 Log "--- 4) RabbitMQ reservation expiry path ---"
