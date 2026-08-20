@@ -122,8 +122,8 @@ async function performRefresh(generation: number, signal: AbortSignal): Promise<
     setAuthSession(session);
     return session;
   } catch {
-    if (generation === authGeneration) {
-      clearAuthSession();
+    if (signal.aborted || generation !== authGeneration) {
+      return null;
     }
     return null;
   }

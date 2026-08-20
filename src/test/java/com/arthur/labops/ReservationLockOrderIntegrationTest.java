@@ -22,6 +22,13 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import com.arthur.labops.equipment.Equipment;
+import com.arthur.labops.equipment.EquipmentRepository;
+import com.arthur.labops.reservation.Reservation;
+import com.arthur.labops.reservation.ReservationRepository;
+import com.arthur.labops.reservation.expiry.ReservationExpiryCompensationJob;
+import com.arthur.labops.user.PlatformUser;
+import com.arthur.labops.user.PlatformUserRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -35,6 +42,18 @@ class ReservationLockOrderIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private ReservationExpiryCompensationJob compensationJob;
+
+    @Autowired
+    private EquipmentRepository equipmentRepository;
+
+    @Autowired
+    private ReservationRepository reservationRepository;
+
+    @Autowired
+    private PlatformUserRepository userRepository;
 
     @Test
     void approvalLocksEquipmentBeforeReservation() throws Exception {
@@ -106,6 +125,47 @@ class ReservationLockOrderIntegrationTest {
                 .isNotBlank()
                 .contains(" order by ")
                 .contains(".id");
+    }
+
+    @Test
+    void compensationExpiresWithEquipmentLockedBeforeReservation() {
+        TestAuth.clearCache();
+        Equipment equipment = equipmentRepository.save(new Equipment(
+                "LOCK-EXP-" + UUID.randomUUID().toString().substring(0, 8),
+                "补偿锁顺序设备",
+                "并发测试",
+                "实验楼 L102"));
+        PlatformUser student = userRepository.findByUsername("student").orElseThrow();
+        Instant start = Instant.now().plus(5, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        Reservation overdue = reservationRepository.saveAndFlush(new Reservation(
+                equipment,
+                student.getId(),
+                student.getDisplayName(),
+                "补偿任务锁顺序",
+                start,
+                start.plus(1, ChronoUnit.HOURS),
+                Instant.now().minus(1, ChronoUnit.SECONDS)));
+
+        SqlCaptureStatementInspector.clear();
+        compensationJob.expireOverduePendingReservations();
+
+        List<String> sql = SqlCaptureStatementInspector.snapshot();
+        int equipmentLock = firstIndex(sql,
+                statement -> statement.contains(" from equipment ") && statement.contains(" for update"));
+        int reservationLock = firstIndex(sql,
+                statement -> statement.contains(" from equipment_reservations ") && statement.contains(" for update"));
+
+        assertThat(equipmentLock)
+                .as("compensation expire must lock equipment; SQL=%s", sql)
+                .isGreaterThanOrEqualTo(0);
+        assertThat(reservationLock)
+                .as("compensation expire must lock reservation; SQL=%s", sql)
+                .isGreaterThanOrEqualTo(0);
+        assertThat(equipmentLock)
+                .as("compensation lock order must stay Equipment -> Reservation; SQL=%s", sql)
+                .isLessThan(reservationLock);
+        assertThat(reservationRepository.findById(overdue.getId()).orElseThrow().getStatus().name())
+                .isEqualTo("EXPIRED");
     }
 
     private Long createEquipment(String admin) throws Exception {

@@ -11,6 +11,10 @@ export const statusLabels: Record<string, string> = {
   LOW: "低", MEDIUM: "中", HIGH: "高", URGENT: "紧急",
 };
 
+export function isReservableStatus(status: string) {
+  return status !== "RETIRED" && status !== "MAINTENANCE";
+}
+
 export const actionLabels: Record<string, string> = {
   EQUIPMENT_CREATED: "创建设备", EQUIPMENT_UPDATED: "更新设备", EQUIPMENT_RETIRED: "退役设备",
   EQUIPMENT_RESTORED: "恢复设备", RESERVATION_CREATED: "提交预约", RESERVATION_APPROVED: "批准预约",

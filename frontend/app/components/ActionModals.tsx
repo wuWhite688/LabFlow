@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 import type { Equipment, EquipmentForm, ModalKind, PageData, ReservationForm, WorkOrderForm } from "../lib/types";
+import { isReservableStatus } from "../lib/labels";
 import { Modal } from "./ui";
 
 export function ActionModals({ modal, busy, equipment, equipmentForm, reservationForm, workorderForm, onClose, onEquipmentChange, onReservationChange, onWorkorderChange, onSubmitEquipment, onSubmitReservation, onSubmitWorkorder }: {
@@ -32,7 +33,7 @@ export function ActionModals({ modal, busy, equipment, equipmentForm, reservatio
 
   if (modal === "reservation") return <Modal title="发起设备预约" subtitle="提交后将进入教师审批流程" onClose={onClose}>
     <form className="modal-form" onSubmit={onSubmitReservation}>
-      <label>预约设备<select value={reservationForm.equipmentId} onChange={(e) => onReservationChange({ ...reservationForm, equipmentId: e.target.value })} required><option value="">请选择可用设备</option>{equipment?.content.filter((item) => item.status === "AVAILABLE").map((item) => <option key={item.id} value={item.id}>{item.name} · {item.code}</option>)}</select></label>
+      <label>预约设备<select value={reservationForm.equipmentId} onChange={(e) => onReservationChange({ ...reservationForm, equipmentId: e.target.value })} required><option value="">请选择设备</option>{equipment?.content.filter((item) => isReservableStatus(item.status)).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.code}{item.status === "IN_USE" ? "（使用中，可约其他时段）" : ""}</option>)}</select></label>
       <label>使用目的<textarea value={reservationForm.purpose} onChange={(e) => onReservationChange({ ...reservationForm, purpose: e.target.value })} placeholder="说明实验内容与设备用途" required /></label>
       <div className="field-grid"><label>开始时间<input type="datetime-local" value={reservationForm.startTime} onChange={(e) => onReservationChange({ ...reservationForm, startTime: e.target.value })} required /></label><label>结束时间<input type="datetime-local" value={reservationForm.endTime} onChange={(e) => onReservationChange({ ...reservationForm, endTime: e.target.value })} required /></label></div>
       <footer><button type="button" className="secondary" onClick={onClose}>取消</button><button className="primary" disabled={busy}>提交预约</button></footer>

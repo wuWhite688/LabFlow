@@ -161,6 +161,27 @@ test("parallel refresh calls in one auth generation still share one request", as
   }
 });
 
+test("a network error during refresh does not clear an existing session", async () => {
+  const api = await loadAuthModule();
+  const events = [];
+  const originalFetch = globalThis.fetch;
+  api.subscribeSession((session) => events.push(session?.accessToken ?? null));
+  api.setAuthSession({
+    accessToken: "keep-me",
+    expiresIn: 900,
+    user: { id: 1, username: "student", displayName: "Student", role: "STUDENT" },
+  });
+  globalThis.fetch = () => Promise.reject(new TypeError("network down"));
+
+  try {
+    assert.equal(await api.refreshSession(), null);
+    assert.equal(events.at(-1), "keep-me");
+    assert.equal(events.filter((token) => token === null).length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("backend proxy forwards the cookie and rewrites the refresh cookie path", async () => {
   const [, , proxySrc] = await authSources();
 

@@ -87,8 +87,9 @@ public class WorkOrderService {
                     "ACTIVE_WORK_ORDER_EXISTS", "该设备已有未关闭的故障工单", HttpStatus.CONFLICT);
         }
 
-        int cancelledReservations = cancelOpenReservations(equipment.getId(), reporter);
-        equipment.markMaintenance();
+        int cancelledReservations = privilegedReporter(reporter)
+                ? takeEquipmentOffline(equipment, reporter)
+                : cancelOwnOpenReservations(equipment.getId(), reporter);
         FaultWorkOrder workOrder = new FaultWorkOrder(
                 equipment,
                 reporter.getId(),
@@ -135,6 +136,7 @@ public class WorkOrderService {
         }
 
         workOrder.assign(actor.getId());
+        takeEquipmentOfflineIfNeeded(workOrder.getEquipment().getId(), actor);
         auditLogService.record(actor, "WORK_ORDER_CLAIMED", "WORK_ORDER", workOrder.getId(),
                 "维修员主动接单");
         return WorkOrderResponse.from(workOrder);
@@ -161,6 +163,7 @@ public class WorkOrderService {
         if (target == WorkOrderStatus.ASSIGNED) {
             Long assigneeId = resolveAssigneeForAssignment(actor, request.assigneeId());
             workOrder.assign(assigneeId);
+            takeEquipmentOfflineIfNeeded(workOrder.getEquipment().getId(), actor);
         } else {
             workOrder.transitionTo(target);
         }
@@ -272,14 +275,44 @@ public class WorkOrderService {
         return assignee.getId();
     }
 
-    private int cancelOpenReservations(Long equipmentId, PlatformUser actor) {
+    private boolean privilegedReporter(PlatformUser actor) {
+        return actor.getRole() == UserRole.ADMIN || actor.getRole() == UserRole.TEACHER;
+    }
+
+    private void takeEquipmentOfflineIfNeeded(Long equipmentId, PlatformUser actor) {
+        Equipment equipment = equipmentRepository.findByIdForUpdate(equipmentId)
+                .orElseThrow(() -> new BusinessException(
+                        "EQUIPMENT_NOT_FOUND", "设备不存在", HttpStatus.NOT_FOUND));
+        if (equipment.getStatus() == EquipmentStatus.RETIRED
+                || equipment.getStatus() == EquipmentStatus.MAINTENANCE) {
+            return;
+        }
+        takeEquipmentOffline(equipment, actor);
+    }
+
+    private int takeEquipmentOffline(Equipment equipment, PlatformUser actor) {
+        int cancelled = cancelOpenReservations(equipment.getId(), actor, null);
+        equipment.markMaintenance();
+        return cancelled;
+    }
+
+    private int cancelOwnOpenReservations(Long equipmentId, PlatformUser actor) {
+        return cancelOpenReservations(equipmentId, actor, actor.getId());
+    }
+
+    private int cancelOpenReservations(Long equipmentId, PlatformUser actor, Long onlyRequesterId) {
         List<Reservation> open = reservationRepository.findByEquipmentIdAndStatusInForUpdate(
                 equipmentId, OPEN_RESERVATIONS);
+        int cancelled = 0;
         for (Reservation reservation : open) {
+            if (onlyRequesterId != null && !onlyRequesterId.equals(reservation.getRequesterId())) {
+                continue;
+            }
             reservation.cancel();
+            cancelled += 1;
             auditLogService.record(actor, "RESERVATION_CANCELLED", "RESERVATION", reservation.getId(),
                     "设备报修联动取消预约");
         }
-        return open.size();
+        return cancelled;
     }
 }

@@ -276,7 +276,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 | 数据库 | H2 mem | MySQL |
 | 预约锁 | local | Redis |
 | 预约过期 | local scheduler | RabbitMQ TTL + DLX |
-| 体验账号/种子 | 默认开启 | 由 `.env` 的 `LABOPS_DEMO_USERS/DATA` 控制 |
+| 体验账号/种子 | 默认开启 | `.env.example` 默认关闭；`verify-production.ps1` 仅对该次进程打开 |
 
 ## 自动化验证
 

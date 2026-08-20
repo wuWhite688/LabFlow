@@ -20,7 +20,7 @@ All relevant state-changing paths now follow one lock hierarchy:
 
 `Equipment -> Reservation`
 
-Reservation approval, cancellation, and completion first resolve the equipment id, acquire the equipment row with a pessimistic write lock, and then acquire the reservation row with a pessimistic write lock. Work-order creation already follows the same cross-entity order.
+Reservation approval, cancellation, and completion first resolve the equipment id, acquire the equipment row with a pessimistic write lock, and then acquire the reservation row with a pessimistic write lock. Work-order creation already follows the same cross-entity order. Reservation expiry (Rabbit listener and the DB compensation scan) uses the same order inside a `REQUIRES_NEW` transaction per reservation, so it cannot form an ABBA cycle with approval.
 
 When a work order locks multiple reservations for one equipment item, the query also sorts by reservation primary key before applying the pessimistic lock:
 
@@ -33,7 +33,8 @@ This keeps both cross-entity and same-entity multi-row lock acquisition determin
 A Spring Boot integration test installs a Hibernate `StatementInspector` and captures the SQL emitted by the real application path. The test asserts that:
 
 1. reservation approval acquires the `Equipment` `FOR UPDATE` lock before the `Reservation` `FOR UPDATE` lock;
-2. the work-order path's multi-reservation `FOR UPDATE` query contains an `ORDER BY` on the reservation id.
+2. the work-order path's multi-reservation `FOR UPDATE` query contains an `ORDER BY` on the reservation id;
+3. the expiry compensation job also acquires `Equipment` before `Reservation`.
 
 This avoids relying on a timing-sensitive concurrent deadlock reproduction in CI while still protecting the lock-order invariant at the SQL layer.
 
