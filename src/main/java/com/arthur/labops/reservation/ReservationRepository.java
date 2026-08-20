@@ -41,6 +41,9 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
             Instant startBoundary,
             Instant endBoundary);
 
+    @Query("select reservation.equipment.id from Reservation reservation where reservation.id = :id")
+    java.util.Optional<Long> findEquipmentIdById(@Param("id") Long id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select reservation from Reservation reservation where reservation.id = :id")
     java.util.Optional<Reservation> findByIdForUpdate(@Param("id") Long id);
@@ -57,6 +60,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
             select reservation from Reservation reservation
             where reservation.equipment.id = :equipmentId
               and reservation.status in :statuses
+            order by reservation.id
             """)
     java.util.List<Reservation> findByEquipmentIdAndStatusInForUpdate(
             @Param("equipmentId") Long equipmentId,

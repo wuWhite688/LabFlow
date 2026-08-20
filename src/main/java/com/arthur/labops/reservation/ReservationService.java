@@ -94,9 +94,7 @@ public class ReservationService {
     @Transactional(noRollbackFor = ReservationAlreadyExpiredException.class)
     public ReservationResponse decide(Long reservationId, ReservationDecisionRequest request) {
         PlatformUser actor = currentUserService.getRequiredUser();
-        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
-                .orElseThrow(() -> new BusinessException(
-                        "RESERVATION_NOT_FOUND", "预约不存在", HttpStatus.NOT_FOUND));
+        Reservation reservation = findForStateChange(reservationId);
         if (reservation.getStatus() != ReservationStatus.PENDING) {
             throw new BusinessException(
                     "RESERVATION_NOT_PENDING", "只有待审批预约可以处理", HttpStatus.CONFLICT);
@@ -130,9 +128,7 @@ public class ReservationService {
     @Transactional
     public ReservationResponse cancel(Long reservationId) {
         PlatformUser actor = currentUserService.getRequiredUser();
-        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
-                .orElseThrow(() -> new BusinessException(
-                        "RESERVATION_NOT_FOUND", "预约不存在", HttpStatus.NOT_FOUND));
+        Reservation reservation = findForStateChange(reservationId);
         if (!reservation.getRequesterId().equals(actor.getId()) && actor.getRole() != UserRole.ADMIN) {
             throw new BusinessException(
                     "RESERVATION_NOT_OWNED", "只能取消自己的预约", HttpStatus.FORBIDDEN);
@@ -152,9 +148,7 @@ public class ReservationService {
     @Transactional
     public ReservationResponse complete(Long reservationId) {
         PlatformUser actor = currentUserService.getRequiredUser();
-        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
-                .orElseThrow(() -> new BusinessException(
-                        "RESERVATION_NOT_FOUND", "预约不存在", HttpStatus.NOT_FOUND));
+        Reservation reservation = findForStateChange(reservationId);
         if (reservation.getStatus() != ReservationStatus.APPROVED) {
             throw new BusinessException(
                     "RESERVATION_NOT_COMPLETABLE", "只有已批准预约可以完成", HttpStatus.CONFLICT);
@@ -186,6 +180,26 @@ public class ReservationService {
                     root.get("status").in(ReservationStatus.PENDING, ReservationStatus.APPROVED));
         }
         return reservationRepository.findAll(specification, pageable).map(ReservationResponse::from);
+    }
+
+    /**
+     * Reservation state changes and work-order creation both touch the same
+     * equipment + reservation rows. Always acquire the equipment row first,
+     * then the reservation row, so concurrent approval/cancel/complete and
+     * fault reporting cannot form an Equipment <-> Reservation deadlock cycle.
+     */
+    private Reservation findForStateChange(Long reservationId) {
+        Long equipmentId = reservationRepository.findEquipmentIdById(reservationId)
+                .orElseThrow(() -> new BusinessException(
+                        "RESERVATION_NOT_FOUND", "预约不存在", HttpStatus.NOT_FOUND));
+
+        equipmentRepository.findByIdForUpdate(equipmentId)
+                .orElseThrow(() -> new BusinessException(
+                        "EQUIPMENT_NOT_FOUND", "设备不存在", HttpStatus.NOT_FOUND));
+
+        return reservationRepository.findByIdForUpdate(reservationId)
+                .orElseThrow(() -> new BusinessException(
+                        "RESERVATION_NOT_FOUND", "预约不存在", HttpStatus.NOT_FOUND));
     }
 
     private void validateTimeWindow(Instant start, Instant end) {
