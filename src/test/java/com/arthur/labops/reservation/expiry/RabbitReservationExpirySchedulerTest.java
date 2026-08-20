@@ -68,6 +68,15 @@ class RabbitReservationExpirySchedulerTest {
         assertThat(shortQueue.getArguments().get("x-dead-letter-routing-key"))
                 .isEqualTo(RabbitReservationExpiryConfiguration.EXPIRY_ROUTING_KEY);
 
+        // Empty delay queues must auto-delete after TTL + grace, otherwise they leak.
+        assertThat(((Number) longQueue.getArguments().get("x-expires")).longValue())
+                .isEqualTo(longTtl + RabbitReservationExpiryScheduler.QUEUE_EXPIRES_GRACE_MS);
+        assertThat(((Number) shortQueue.getArguments().get("x-expires")).longValue())
+                .isEqualTo(shortTtl + RabbitReservationExpiryScheduler.QUEUE_EXPIRES_GRACE_MS);
+        assertThat(longQueue.isDurable()).isTrue();
+        assertThat(longQueue.isExclusive()).isFalse();
+        assertThat(longQueue.isAutoDelete()).isFalse();
+
         // Messages published to default exchange with routing key = private queue name (not shared FIFO).
         assertThat(rabbitTemplate.sends).hasSize(2);
         assertThat(rabbitTemplate.sends.get(0).exchange()).isEmpty();

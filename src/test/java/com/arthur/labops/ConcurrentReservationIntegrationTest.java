@@ -13,6 +13,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,14 +50,22 @@ class ConcurrentReservationIntegrationTest {
 
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch startSignal = new CountDownLatch(1);
-        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
             Future<Integer> first = executor.submit(() -> reserve(body, ready, startSignal));
             Future<Integer> second = executor.submit(() -> reserve(body, ready, startSignal));
-            ready.await();
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
             startSignal.countDown();
 
-            List<Integer> statuses = List.of(first.get(), second.get());
+            List<Integer> statuses = List.of(
+                    getOrTimeout(first, "overlapping create first"),
+                    getOrTimeout(second, "overlapping create second"));
             assertThat(statuses).containsExactlyInAnyOrder(201, 409);
+        } finally {
+            executor.shutdownNow();
+            if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
+                throw new AssertionError("worker threads did not terminate");
+            }
         }
     }
 
@@ -86,5 +96,13 @@ class ConcurrentReservationIntegrationTest {
                 result.getResponse().getContentAsByteArray(),
                 new TypeReference<>() {});
         return ((Number) body.get("id")).longValue();
+    }
+
+    private static int getOrTimeout(Future<Integer> future, String race) throws Exception {
+        try {
+            return future.get(10, TimeUnit.SECONDS);
+        } catch (TimeoutException timeout) {
+            throw new AssertionError("timeout (" + race + ")", timeout);
+        }
     }
 }

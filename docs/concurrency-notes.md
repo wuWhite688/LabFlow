@@ -50,6 +50,16 @@ H2 can verify: both threads return, no 500, and (with `@Version`) no silent lost
 
 This change removes the identified `Equipment <-> Reservation` lock-order inversion. It does not claim that every possible database deadlock is impossible; future code that introduces new multi-entity locking should preserve the same global ordering rule.
 
+## Redis lock, Rabbit expiry, and compensation
+
+Three test layers:
+
+1. **Default CI (H2 + local lock + local expiry).** `./mvnw verify` on GitHub Actions. Covers Redis lock *protocol* with in-memory `Commands` (timeout, retry, compare-and-delete Lua, unlock errors must not hide a successful booking), local same-equipment serialization, per-queue TTL / `x-expires` (no shared FIFO), listener duplicate consume, late expiry on APPROVED/CANCELLED/COMPLETED, compensation idempotence, per-row `REQUIRES_NEW` isolation, and expire vs approve/cancel races.
+2. **Real RabbitMQ.** `RabbitReservationExpiryOrderingIntegrationTest` skips unless `127.0.0.1:5672` is open. That is the only HOL proof against a broker. No Testcontainers.
+3. **Real Redis.** Not required in CI. Overlapping creates on default CI use the local lock plus equipment `PESSIMISTIC_WRITE`. Redis wait-timeout returns 409 and does **not** skip the database; writers that enter `create` still take the row lock.
+
+`PESSIMISTIC_WRITE` remains the correctness backstop. Compensation lock order stays `Equipment → Reservation` (SQL inspector). A listener crash is recovered by the next compensation scan.
+
 ### Interview summary
 
 > I found that reservation state changes and work-order creation acquired the same database locks in opposite orders, creating an ABBA deadlock risk. I unified the order to `Equipment -> Reservation`, sorted multi-row reservation locks by primary key, and added SQL-level integration assertions so the ordering cannot regress silently.
