@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.arthur.labops.common.BusinessException;
@@ -35,7 +36,12 @@ public class LoginAttemptGuard {
 
     public void assertAllowed(String clientIp, String username) {
         long now = System.currentTimeMillis();
-        evictEmptyWindows(now);
+        // Only the two buckets this request actually consults are pruned here.
+        // Sweeping the whole map per request made the check O(live buckets), and
+        // buckets are created precisely by the brute-force traffic this guard
+        // defends against — so the defence degraded fastest under attack.
+        // Bulk cleanup now runs on a schedule; see evictExpiredWindows.
+        //
         // Read existing buckets only. Creating a per-username key here would let
         // an IP-capped client grow the map by rotating usernames on 429s.
         if (snapshotCount(ipKey(clientIp), now) >= maxPerIp
@@ -83,7 +89,15 @@ public class LoginAttemptGuard {
         return count[0];
     }
 
-    private void evictEmptyWindows(long now) {
+    /**
+     * Drops buckets whose attempts have all aged out. Runs on a timer instead of
+     * inside {@link #assertAllowed} so a login check stays O(1) no matter how many
+     * buckets a brute-force attempt has created. Correctness never depended on this
+     * sweep — each check prunes the buckets it reads — only bounded memory does.
+     */
+    @Scheduled(fixedDelayString = "${labops.login.evict-interval:60000}")
+    void evictExpiredWindows() {
+        long now = System.currentTimeMillis();
         for (String key : windows.keySet()) {
             snapshotCount(key, now);
         }

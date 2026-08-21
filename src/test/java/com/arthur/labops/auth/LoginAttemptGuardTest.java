@@ -63,9 +63,39 @@ class LoginAttemptGuardTest {
 
         assertThatCode(() -> guard.assertAllowed("203.0.113.53", "later"))
                 .doesNotThrowAnyException();
+        // Bulk eviction is no longer a side effect of every check — it runs on a
+        // timer — so drive it explicitly before asserting the map drained.
+        guard.evictExpiredWindows();
         assertThat(guard.windowCount()).isZero();
         guard.recordFailure("203.0.113.53", "later");
         assertThat(guard.windowCount()).isEqualTo(2);
+    }
+
+    /**
+     * A single check must not walk the whole bucket map. Buckets are created by the
+     * brute-force traffic this guard defends against, so a per-request sweep made
+     * every login slower exactly as an attack ramped up.
+     */
+    @Test
+    void singleCheckDoesNotSweepUnrelatedBuckets() throws Exception {
+        LoginAttemptGuard guard = new LoginAttemptGuard(5, 100, Duration.ofMillis(60));
+        for (int i = 0; i < 20; i++) {
+            guard.recordFailure("198.51.100." + i, "user-" + i);
+        }
+        int bucketsBefore = guard.windowCount();
+        assertThat(bucketsBefore).isEqualTo(40);
+
+        Thread.sleep(100);
+
+        // Every bucket above is now expired. One unrelated check touches only the
+        // two keys it reads, so the other 40 must survive untouched.
+        assertThatCode(() -> guard.assertAllowed("203.0.113.99", "someone"))
+                .doesNotThrowAnyException();
+        assertThat(guard.windowCount()).isEqualTo(bucketsBefore);
+
+        // The scheduled sweep is what reclaims them.
+        guard.evictExpiredWindows();
+        assertThat(guard.windowCount()).isZero();
     }
 
     @Test
