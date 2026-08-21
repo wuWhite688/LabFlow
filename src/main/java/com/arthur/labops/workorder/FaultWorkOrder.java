@@ -61,6 +61,17 @@ public class FaultWorkOrder {
     @Column(name = "resolved_at")
     private Instant resolvedAt;
 
+    /**
+     * Whether this work order requires the equipment to stay offline.
+     *
+     * <p>Student reports intentionally leave the equipment usable (only the
+     * reporter's own reservations are cancelled), so they must not drive
+     * {@link com.arthur.labops.equipment.EquipmentStatusService} to MAINTENANCE.
+     * Privileged reports and any assignment set this flag explicitly.
+     */
+    @Column(name = "equipment_taken_offline", nullable = false)
+    private boolean equipmentTakenOffline;
+
     @Version
     private long version;
 
@@ -86,6 +97,12 @@ public class FaultWorkOrder {
         this.updatedAt = Instant.now();
     }
 
+    /** Marks that the equipment is held offline for this work order. */
+    public void markEquipmentTakenOffline() {
+        this.equipmentTakenOffline = true;
+        this.updatedAt = Instant.now();
+    }
+
     public void transitionTo(WorkOrderStatus targetStatus) {
         this.status = targetStatus;
         this.updatedAt = Instant.now();
@@ -108,4 +125,5 @@ public class FaultWorkOrder {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Instant getResolvedAt() { return resolvedAt; }
+    public boolean isEquipmentTakenOffline() { return equipmentTakenOffline; }
 }

@@ -104,15 +104,20 @@ public class DemoDataInitializer implements ApplicationRunner {
         completed.complete();
         reservationRepository.saveAll(List.of(pending, approved, teacherReservation, completed));
 
+        // These three seeds represent equipment already taken offline for repair, so
+        // each work order must hold that state — otherwise EquipmentStatusService.sync
+        // brings the equipment back to AVAILABLE on the next scheduled scan.
         equipment.get(2).markMaintenance();
         FaultWorkOrder submitted = new FaultWorkOrder(equipment.get(2), student.getId(), student.getDisplayName(),
                 "样品台回零异常", "启动自检时样品台在 2θ 位置停顿并提示限位错误，已重新上电一次。", WorkOrderPriority.URGENT);
+        submitted.markEquipmentTakenOffline();
 
         equipment.get(3).markMaintenance();
         FaultWorkOrder inProgress = new FaultWorkOrder(equipment.get(3), teacher.getId(), teacher.getDisplayName(),
                 "热盖温度波动", "连续运行 40 分钟后热盖温度上下波动约 3℃，可能影响扩增曲线稳定性。", WorkOrderPriority.HIGH);
         inProgress.assign(technician.getId());
         inProgress.transitionTo(WorkOrderStatus.IN_PROGRESS);
+        inProgress.markEquipmentTakenOffline();
 
         equipment.get(4).markMaintenance();
         FaultWorkOrder resolved = new FaultWorkOrder(equipment.get(4), student.getId(), student.getDisplayName(),
@@ -120,6 +125,7 @@ public class DemoDataInitializer implements ApplicationRunner {
         resolved.assign(technician2.getId());
         resolved.transitionTo(WorkOrderStatus.IN_PROGRESS);
         resolved.transitionTo(WorkOrderStatus.RESOLVED);
+        resolved.markEquipmentTakenOffline();
         workOrderRepository.saveAllAndFlush(List.of(submitted, inProgress, resolved));
 
         updateWorkOrderTimes(

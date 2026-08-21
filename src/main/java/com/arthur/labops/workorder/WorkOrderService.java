@@ -87,7 +87,8 @@ public class WorkOrderService {
                     "ACTIVE_WORK_ORDER_EXISTS", "该设备已有未关闭的故障工单", HttpStatus.CONFLICT);
         }
 
-        int cancelledReservations = privilegedReporter(reporter)
+        boolean privileged = privilegedReporter(reporter);
+        int cancelledReservations = privileged
                 ? takeEquipmentOffline(equipment, reporter)
                 : cancelOwnOpenReservations(equipment.getId(), reporter);
         FaultWorkOrder workOrder = new FaultWorkOrder(
@@ -97,6 +98,11 @@ public class WorkOrderService {
                 request.title().trim(),
                 request.description().trim(),
                 request.priority());
+        if (privileged) {
+            // Only a privileged report holds the equipment offline. A student report
+            // leaves it usable, and must keep doing so when sync() next runs.
+            workOrder.markEquipmentTakenOffline();
+        }
         FaultWorkOrder saved = workOrderRepository.save(workOrder);
         String detail = "设备 " + equipment.getCode() + " 报修";
         if (cancelledReservations > 0) {
@@ -136,7 +142,7 @@ public class WorkOrderService {
         }
 
         workOrder.assign(actor.getId());
-        takeEquipmentOfflineIfNeeded(workOrder.getEquipment().getId(), actor);
+        takeEquipmentOfflineFor(workOrder, actor);
         auditLogService.record(actor, "WORK_ORDER_CLAIMED", "WORK_ORDER", workOrder.getId(),
                 "维修员主动接单");
         return WorkOrderResponse.from(workOrder);
@@ -163,7 +169,7 @@ public class WorkOrderService {
         if (target == WorkOrderStatus.ASSIGNED) {
             Long assigneeId = resolveAssigneeForAssignment(actor, request.assigneeId());
             workOrder.assign(assigneeId);
-            takeEquipmentOfflineIfNeeded(workOrder.getEquipment().getId(), actor);
+            takeEquipmentOfflineFor(workOrder, actor);
         } else {
             workOrder.transitionTo(target);
         }
@@ -279,10 +285,16 @@ public class WorkOrderService {
         return actor.getRole() == UserRole.ADMIN || actor.getRole() == UserRole.TEACHER;
     }
 
-    private void takeEquipmentOfflineIfNeeded(Long equipmentId, PlatformUser actor) {
-        Equipment equipment = equipmentRepository.findByIdForUpdate(equipmentId)
+    /**
+     * An assigned work order always holds its equipment offline, so the flag is set
+     * regardless of the equipment's current status — otherwise closing this order
+     * would let sync() bring the equipment back while it is still under repair.
+     */
+    private void takeEquipmentOfflineFor(FaultWorkOrder workOrder, PlatformUser actor) {
+        Equipment equipment = equipmentRepository.findByIdForUpdate(workOrder.getEquipment().getId())
                 .orElseThrow(() -> new BusinessException(
                         "EQUIPMENT_NOT_FOUND", "设备不存在", HttpStatus.NOT_FOUND));
+        workOrder.markEquipmentTakenOffline();
         if (equipment.getStatus() == EquipmentStatus.RETIRED
                 || equipment.getStatus() == EquipmentStatus.MAINTENANCE) {
             return;
