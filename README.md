@@ -2,6 +2,38 @@
 
 面向高校实验室的设备运营系统：管台账、管预约、管报修。学生提交预约，教师审批，维修员处理故障，管理员看全局与审计。适合作为可演示的后端工程项目。
 
+## 界面预览
+
+> 以下截图全部来自本机真实运行的服务，走的是默认 H2 profile（`.\start-fullstack.ps1`，零外部中间件），
+> 数据是启动时写入的演示种子：8 台设备、4 条预约、3 条工单与对应审计记录。
+
+**运营总览（管理员）**：设备在册数、待审批、开放工单与设备健康度四项指标，右侧汇聚异常与审计入口。
+
+![运营总览](docs/screenshots/02-dashboard-admin.png)
+
+**同一套 app shell，导航按角色收窄**。学生登录后只剩四个入口（没有「操作审计」），标题与文案也随角色切换，列表只展示与本人相关的预约和报修——权限不是靠前端藏按钮，服务端的申请人一律取登录用户。
+
+![学生工作台](docs/screenshots/07-dashboard-student.png)
+
+**操作审计**：谁、在什么角色下、对哪个对象做了什么，全部留痕，仅管理员可见。
+
+![操作审计](docs/screenshots/06-audit.png)
+
+<details>
+<summary>登录页与其余业务页面</summary>
+
+![登录页](docs/screenshots/01-login.png)
+
+![设备中心](docs/screenshots/03-equipment.png)
+
+![预约管理](docs/screenshots/04-reservations.png)
+
+![故障工单](docs/screenshots/05-workorders.png)
+
+![维修员工单视图](docs/screenshots/08-workorders-technician.png)
+
+</details>
+
 ## 能跑通的主流程
 
 **预约：** 选设备与时段 → 进入 `PENDING` → 教师批准为 `APPROVED` → 超时未批自动 `EXPIRED` → 用完后 `COMPLETED`。重叠的待审批可以同时存在；真正占住时段的只有已批准预约。
