@@ -120,6 +120,15 @@ public class EquipmentService {
         PlatformUser actor = currentUserService.getRequiredUser();
         Equipment equipment = equipmentRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new BusinessException("EQUIPMENT_NOT_FOUND", "设备不存在", HttpStatus.NOT_FOUND));
+        // Mirror retire()'s precondition. Equipment.restoreFromRetired throws
+        // IllegalStateException, which no handler maps — it would surface as a 500
+        // with an "Unhandled server exception" ERROR log for what is really a
+        // client-side conflict. Every entity state guard needs a BusinessException
+        // ahead of it here; the entity check stays as the second line of defence.
+        if (equipment.getStatus() != EquipmentStatus.RETIRED) {
+            throw new BusinessException(
+                    "EQUIPMENT_NOT_RETIRED", "仅已退役设备可恢复", HttpStatus.CONFLICT);
+        }
         equipment.restoreFromRetired();
         equipmentStatusService.sync(equipment.getId());
         auditLogService.record(actor, "EQUIPMENT_RESTORED", "EQUIPMENT", equipment.getId(),
