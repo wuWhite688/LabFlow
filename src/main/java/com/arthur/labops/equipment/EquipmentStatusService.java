@@ -45,7 +45,11 @@ public class EquipmentStatusService {
         }
 
         Instant now = Instant.now();
-        if (workOrderRepository.existsByEquipmentIdAndStatusIn(equipmentId, ACTIVE_WORK_ORDERS)) {
+        // Only work orders holding the equipment offline count. A student report
+        // leaves the equipment usable by design; deriving MAINTENANCE from every
+        // active work order would undo that on the next scheduled sync.
+        if (workOrderRepository.existsByEquipmentIdAndEquipmentTakenOfflineTrueAndStatusIn(
+                equipmentId, ACTIVE_WORK_ORDERS)) {
             equipment.forceStatus(EquipmentStatus.MAINTENANCE);
             return;
         }

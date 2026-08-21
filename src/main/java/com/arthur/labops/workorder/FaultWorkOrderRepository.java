@@ -16,6 +16,14 @@ public interface FaultWorkOrderRepository
 
     boolean existsByEquipmentIdAndStatusIn(Long equipmentId, Collection<WorkOrderStatus> statuses);
 
+    /**
+     * Only work orders that actually hold the equipment offline may drive it to
+     * MAINTENANCE. Student reports stay out of this so their limited blast
+     * radius survives the next status sync.
+     */
+    boolean existsByEquipmentIdAndEquipmentTakenOfflineTrueAndStatusIn(
+            Long equipmentId, Collection<WorkOrderStatus> statuses);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select workOrder from FaultWorkOrder workOrder where workOrder.id = :id")
     Optional<FaultWorkOrder> findByIdForUpdate(@Param("id") Long id);
