@@ -1,5 +1,7 @@
 # LabFlow 实验室设备预约与故障工单平台
 
+[![CI](https://github.com/wuWhite688/LabFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/wuWhite688/LabFlow/actions/workflows/ci.yml)
+
 面向高校实验室的设备运营系统：管台账、管预约、管报修。学生提交预约，教师审批，维修员处理故障，管理员看全局与审计。适合作为可演示的后端工程项目。
 
 ## 界面预览
