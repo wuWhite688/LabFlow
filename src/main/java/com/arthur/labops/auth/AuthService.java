@@ -60,12 +60,15 @@ public class AuthService {
             throw new BusinessException("AUTHENTICATION_FAILED", "登录失败", HttpStatus.UNAUTHORIZED);
         }
 
+        // No enabled check here: DatabaseUserDetailsService maps enabled onto
+        // UserDetails, so Spring Security's pre-authentication checks reject a
+        // disabled account with DisabledException *before* the password is even
+        // compared — it lands in the AuthenticationException catch above. Callers
+        // therefore see AUTHENTICATION_FAILED for both a disabled account and a
+        // wrong password, which is the behaviour we want: it does not reveal that
+        // the account exists and the supplied password was correct.
         PlatformUser user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("INVALID_CREDENTIALS", "用户名或密码错误", HttpStatus.UNAUTHORIZED));
-        if (!user.isEnabled()) {
-            loginAttemptGuard.recordFailure(clientIp, username);
-            throw new BusinessException("USER_DISABLED", "账号已停用", HttpStatus.UNAUTHORIZED);
-        }
         loginAttemptGuard.recordSuccess(clientIp, username);
         return issueTokens(user);
     }
