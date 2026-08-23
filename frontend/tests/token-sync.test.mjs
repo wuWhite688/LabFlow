@@ -23,6 +23,18 @@ async function loadAuthModule() {
   return import(`data:text/javascript;base64,${encoded}#${Date.now()}-${Math.random()}`);
 }
 
+async function loadProxyModule() {
+  const source = await readFile(new URL("../app/api/backend/[...path]/route.ts", import.meta.url), "utf8");
+  const output = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+  const encoded = Buffer.from(output).toString("base64");
+  return import(`data:text/javascript;base64,${encoded}#${Date.now()}-${Math.random()}`);
+}
+
 function deferred() {
   let resolve;
   const promise = new Promise((done) => {
@@ -191,4 +203,35 @@ test("backend proxy forwards the cookie and rewrites the refresh cookie path", a
     proxySrc,
     /setCookie\.replace\(\/Path=\\\/api\\\/auth\(\?=;\|\$\)\/i, "Path=\/api\/backend\/api\/auth"\)/,
   );
+});
+
+test("backend proxy replaces caller-supplied client identity with the edge address", async () => {
+  const proxy = await loadProxyModule();
+  const originalFetch = globalThis.fetch;
+  let forwardedHeaders;
+  globalThis.fetch = async (_url, init) => {
+    forwardedHeaders = new Headers(init.headers);
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  try {
+    const request = new Request("http://localhost/api/backend/api/auth/login", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "cf-connecting-ip": "203.0.113.42",
+        "x-forwarded-for": "198.51.100.8, 198.51.100.9",
+        "x-bff-client-ip": "192.0.2.99",
+      },
+      body: "{}",
+    });
+    await proxy.POST(request, { params: Promise.resolve({ path: ["api", "auth", "login"] }) });
+
+    assert.equal(proxy.clientIpFromHeaders(request.headers), "203.0.113.42");
+    assert.equal(forwardedHeaders.get("x-bff-client-ip"), "203.0.113.42");
+    assert.equal(forwardedHeaders.has("cf-connecting-ip"), false);
+    assert.equal(forwardedHeaders.has("x-forwarded-for"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

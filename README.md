@@ -79,7 +79,7 @@ ReservationApplicationService.create
 | 创建 | 多条时间重叠的 `PENDING` 可以并存 |
 | 配额 | `PENDING + APPROVED` 计入上限（默认 20） |
 | 占时段 | 只有 `APPROVED` 占用设备日历 |
-| 审批 | 已有重叠 `APPROVED` 时返回 409；并发审批最多一条成功 |
+| 审批 | 已过审批截止时间或预约已结束时返回 409；已有重叠 `APPROVED` 时也返回 409；并发审批最多一条成功 |
 | 其它 | 开始时间必须在未来；单次最长 12 小时；最多提前 30 天 |
 
 压测数据在 [`benchmark/RESULTS.md`](benchmark/RESULTS.md)。那组「同一时段只成功一条」是当时创建也把 `PENDING` 当冲突时的结果；现在冲突发生在审批，不是创建。
@@ -88,7 +88,7 @@ ReservationApplicationService.create
 
 production：`labops.reservation-expiry.mode=rabbit`。
 
-1. 每条待审批预约一条私有 delay queue：`labops.reservation.expiry.delay.{id}.{expiresAtMs}`
+1. 审批截止时间取「创建时间 + 审批时限」与预约结束时间的较早者；每条待审批预约一条私有 delay queue：`labops.reservation.expiry.delay.{id}.{expiresAtMs}`
 2. 队列 TTL + DLX，到期进入共享工作队列
 3. 监听器执行过期；非法 payload（如 `not-a-number`）记 warning 后 ack 丢掉，不重投
 4. 空闲队列用 `x-expires` 自动删
@@ -100,7 +100,7 @@ production：`labops.reservation-expiry.mode=rabbit`。
 
 - Access JWT（HS256，默认 15 分钟）只放前端内存；Refresh 是不透明随机串，HttpOnly Cookie，库里只存 SHA-256，事务内 `FOR UPDATE` 轮换
 - 过滤器每次查库：用户删除/停用立即 401；权限用数据库角色，JWT 里的 role 不算数
-- 登录限流：IP+用户名 与 IP 总量（默认 5 / 20 / 15 分钟），不信任 `X-Forwarded-For`；超限后不再为新用户名建内存桶
+- 登录限流：IP+用户名 与 IP 总量（默认 5 / 20 / 15 分钟）；BFF 优先取 Cloudflare/Vercel 的边缘地址并覆盖为 `X-BFF-Client-IP`，后端只在 loopback/私有服务网来源上信任它，所以后端仍须保持内网可达
 - 默认 `server.address=127.0.0.1`；非 loopback 禁止 demo 账号/种子，并拒绝占位 JWT
 - 分页 `size` 上限 100
 - production 必须提供 `JWT_SECRET`（≥32 字节、非 placeholder），demo 默认关闭

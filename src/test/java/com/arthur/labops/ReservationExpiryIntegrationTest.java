@@ -21,6 +21,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -106,6 +107,42 @@ class ReservationExpiryIntegrationTest {
                     assertThat(log.getActorUsername()).isEqualTo("system");
                     assertThat(log.getActorRole()).isEqualTo("SYSTEM");
                 });
+    }
+
+    @Test
+    void decisionAfterRequestedEndExpiresLegacyPendingReservationInsteadOfApprovingIt() throws Exception {
+        Equipment equipment = equipmentRepository.save(new Equipment(
+                "EXPIRY-END-" + System.nanoTime(),
+                "结束后审批测试设备",
+                "测试仪器",
+                "综合楼 D103"));
+        PlatformUser student = userRepository.findByUsername("student").orElseThrow();
+        Instant end = Instant.now().minus(1, ChronoUnit.SECONDS);
+        Reservation ended = new Reservation(
+                equipment,
+                student.getId(),
+                student.getDisplayName(),
+                "验证预约结束后不能审批",
+                end.minus(1, ChronoUnit.HOURS),
+                end,
+                Instant.now().plus(1, ChronoUnit.HOURS));
+        ReflectionTestUtils.setField(ended, "expiresAt", Instant.now().plus(1, ChronoUnit.HOURS));
+        ended = reservationRepository.saveAndFlush(ended);
+        Long endedId = ended.getId();
+
+        mockMvc.perform(patch("/api/reservations/{id}/decision", endedId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, "teacher", "teacher123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"APPROVED\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("RESERVATION_ALREADY_EXPIRED"));
+
+        assertThat(reservationRepository.findById(endedId).orElseThrow().getStatus())
+                .isEqualTo(ReservationStatus.EXPIRED);
+        assertThat(operationLogRepository.findAll().stream()
+                .filter(log -> "RESERVATION_EXPIRED".equals(log.getAction()))
+                .filter(log -> endedId.equals(log.getTargetId())))
+                .singleElement();
     }
 
     private Map<Long, String> waitForExpiry(Long pendingId, Long approvedId) throws Exception {

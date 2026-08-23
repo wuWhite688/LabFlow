@@ -80,7 +80,6 @@ public class AuthController {
     }
 
     static String clientIp(HttpServletRequest request) {
-        String addr = request.getRemoteAddr();
-        return addr == null || addr.isBlank() ? "unknown" : addr;
+        return ClientIpResolver.resolve(request);
     }
 }

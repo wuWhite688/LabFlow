@@ -75,7 +75,7 @@ public class Reservation {
         this.endTime = endTime;
         this.status = ReservationStatus.PENDING;
         this.createdAt = Instant.now();
-        this.expiresAt = expiresAt;
+        this.expiresAt = expiresAt.isBefore(endTime) ? expiresAt : endTime;
     }
 
     public Long getId() { return id; }
@@ -107,7 +107,8 @@ public class Reservation {
     }
 
     public boolean expireIfPending(Instant now) {
-        if (status == ReservationStatus.PENDING && !expiresAt.isAfter(now)) {
+        if (status == ReservationStatus.PENDING
+                && (!expiresAt.isAfter(now) || !endTime.isAfter(now))) {
             status = ReservationStatus.EXPIRED;
             return true;
         }
