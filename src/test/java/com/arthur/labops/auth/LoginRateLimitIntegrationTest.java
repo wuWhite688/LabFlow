@@ -86,6 +86,23 @@ class LoginRateLimitIntegrationTest {
     }
 
     @Test
+    void clientsBehindTheSameBffDoNotShareTheIpBucket() throws Exception {
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(post("/api/auth/login")
+                            .with(bffClientIp("203.0.113.60"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body("bff-user-" + i, "wrong")))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        mockMvc.perform(post("/api/auth/login")
+                        .with(bffClientIp("203.0.113.61"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("another-bff-user", "wrong")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void oversizedCredentialsAreRejected() throws Exception {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -114,6 +131,14 @@ class LoginRateLimitIntegrationTest {
     private static RequestPostProcessor remoteAddr(String ip) {
         return request -> {
             request.setRemoteAddr(ip);
+            return request;
+        };
+    }
+
+    private static RequestPostProcessor bffClientIp(String ip) {
+        return request -> {
+            request.setRemoteAddr("172.18.0.5");
+            request.addHeader(ClientIpResolver.BFF_CLIENT_IP_HEADER, ip);
             return request;
         };
     }

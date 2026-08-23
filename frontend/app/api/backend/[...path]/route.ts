@@ -1,5 +1,29 @@
 ﻿const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL ?? "http://127.0.0.1:18080";
 
+const BFF_CLIENT_IP_HEADER = "x-bff-client-ip";
+const CLIENT_IP_SOURCE_HEADERS = [
+  "cf-connecting-ip",
+  "x-vercel-forwarded-for",
+  "x-forwarded-for",
+  "x-real-ip",
+] as const;
+
+export function clientIpFromHeaders(headers: Headers): string | null {
+  for (const name of CLIENT_IP_SOURCE_HEADERS) {
+    const value = headers.get(name);
+    if (!value) continue;
+
+    const candidate = value.split(",", 1)[0].trim();
+    const unwrapped = candidate.startsWith("[") && candidate.endsWith("]")
+      ? candidate.slice(1, -1)
+      : candidate;
+    if (unwrapped.length > 0 && unwrapped.length <= 45 && /^[0-9a-f:.]+$/i.test(unwrapped)) {
+      return unwrapped;
+    }
+  }
+  return null;
+}
+
 async function proxy(request: Request, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
   if (!path.length || path.some((part) => part === ".." || part.includes("/"))) {
@@ -13,6 +37,8 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+  const clientIp = clientIpFromHeaders(request.headers);
+  if (clientIp) headers.set(BFF_CLIENT_IP_HEADER, clientIp);
 
   try {
     const response = await fetch(targetUrl, {
