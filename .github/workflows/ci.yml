@@ -16,6 +16,24 @@ jobs:
     name: 后端 · Java 21
     runs-on: ubuntu-latest
 
+    # RabbitReservationExpiryOrderingIntegrationTest 用 assumeTrue 检测 127.0.0.1:5672，
+    # 端口不通就整类跳过。没有这个 service 时它在 CI 里从未真正执行过，
+    # 而 surefire 仍记为 skipped、CI 仍是绿灯 —— 即"假绿灯"。
+    # 凭据必须与该测试 @DynamicPropertySource 的默认值一致。
+    services:
+      rabbitmq:
+        image: rabbitmq:3.13-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: labops
+          RABBITMQ_DEFAULT_PASS: labflow_rabbit_verify_only
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@v4
 
@@ -26,11 +44,26 @@ jobs:
           java-version: "21"
           cache: maven
 
-      # 默认 profile 走 H2、进程内锁与本地定时器，零外部依赖。
-      # 因此并发预约、工单并发派单、预约过期回滚、RabbitMQ 调度顺序
-      # 这些集成测试不需要在 CI 里额外拉起 MySQL / Redis / RabbitMQ。
+      # 默认 profile 仍走 H2、进程内锁与本地定时器，不需要 MySQL / Redis。
+      # 上面的 RabbitMQ service 只为让真实延迟队列顺序回归真正跑起来。
       - name: 构建与测试
         run: ./mvnw -B --no-transfer-progress verify
+
+      # 只断言 tests>0 是不够的：被 assumeTrue 跳过时 surefire 同样记 tests="1"，
+      # 只是同时记 skipped="1"。所以必须一并确认没有 skipped 元素，
+      # 否则这道闸自己就会变成新的假绿灯。
+      - name: 确认真实 RabbitMQ 顺序回归已执行
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="target/surefire-reports/TEST-com.arthur.labops.reservation.expiry.RabbitReservationExpiryOrderingIntegrationTest.xml"
+          test -f "$report"
+          grep -Eq '<testsuite [^>]*tests="[1-9][0-9]*"' "$report"
+          if grep -q '<skipped' "$report"; then
+            echo "真实 RabbitMQ 顺序回归被跳过，broker 未就绪：" >&2
+            grep -E '<testsuite |<skipped' "$report" >&2
+            exit 1
+          fi
 
       # 失败时同样上传，否则排查 CI 红灯只能靠日志里被截断的堆栈
       - name: 上传测试报告
