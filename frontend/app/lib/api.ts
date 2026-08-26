@@ -13,9 +13,27 @@ export type SessionListener = (session: AuthSession | null) => void;
 
 const LEGACY_AUTH_KEYS = ["labflow.accessToken", "labflow.refreshToken", "labflow.auth"];
 
+// login, logout and refresh all rewrite the same HttpOnly refresh cookie. Two of them
+// overlapping - across tabs, or a fast logout-then-login - can interleave so the loser's
+// Set-Cookie lands last and resurrects or destroys the wrong session. Web Locks serialize
+// them per origin, which covers tabs as well as one tab racing itself.
+const AUTH_COOKIE_LOCK = "labflow-refresh-token";
+
 let authSession: AuthSession | null = null;
 let authGeneration = 0;
+let logoutInFlight: Promise<void> | null = null;
 const sessionListeners = new Set<SessionListener>();
+
+function hasBrowserLocks(): boolean {
+  return typeof navigator !== "undefined" && !!navigator.locks;
+}
+
+function withAuthCookieLock<T>(operation: () => Promise<T>): Promise<T> {
+  if (hasBrowserLocks()) {
+    return navigator.locks.request(AUTH_COOKIE_LOCK, operation);
+  }
+  return operation();
+}
 
 export function subscribeSession(listener: SessionListener): () => void {
   sessionListeners.add(listener);
@@ -63,28 +81,45 @@ export function clearAuthSession() {
 }
 
 export async function loginRequest(username: string, password: string): Promise<LoginResult> {
-  const response = await fetch("/api/backend/api/auth/login", {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-    credentials: "same-origin",
-    cache: "no-store",
+  // A logout still on the wire would clear the cookie this login is about to set.
+  if (logoutInFlight) await logoutInFlight;
+  return withAuthCookieLock(async () => {
+    const response = await fetch("/api/backend/api/auth/login", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      let detail: ApiError = {};
+      try { detail = await response.json() as ApiError; } catch { /* empty */ }
+      throw new Error(detail.message || `登录失败（${response.status}）`);
+    }
+    return response.json() as Promise<LoginResult>;
   });
-  if (!response.ok) {
-    let detail: ApiError = {};
-    try { detail = await response.json() as ApiError; } catch { /* empty */ }
-    throw new Error(detail.message || `登录失败（${response.status}）`);
-  }
-  return response.json() as Promise<LoginResult>;
 }
 
 export async function logoutRequest(): Promise<void> {
-  await fetch("/api/backend/api/auth/logout", {
-    method: "POST",
-    headers: { Accept: "application/json" },
-    credentials: "same-origin",
-    cache: "no-store",
-  }).catch(() => { /* best-effort */ });
+  // Concurrent logouts are the same intent; collapse them onto one request.
+  if (logoutInFlight) return logoutInFlight;
+  const request = (async () => {
+    // Without Web Locks there is nothing to serialize against, so wait out a refresh
+    // that already started - its Set-Cookie would otherwise arrive after this logout.
+    if (!hasBrowserLocks() && refreshSettled) await refreshSettled;
+    await withAuthCookieLock(() => fetch("/api/backend/api/auth/logout", {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+    }).then(() => undefined));
+  })().catch(() => { /* best-effort */ });
+  logoutInFlight = request;
+  try {
+    await request;
+  } finally {
+    if (logoutInFlight === request) logoutInFlight = null;
+  }
 }
 
 type RefreshOperation = {
@@ -94,6 +129,9 @@ type RefreshOperation = {
 };
 
 let refreshInFlight: RefreshOperation | null = null;
+// Settles when the current refresh finishes, however it finishes. Only the
+// no-Web-Locks fallback path in logoutRequest waits on it.
+let refreshSettled: Promise<void> | null = null;
 
 function invalidatePendingRefresh() {
   authGeneration += 1;
@@ -103,33 +141,37 @@ function invalidatePendingRefresh() {
 }
 
 async function performRefresh(generation: number, signal: AbortSignal): Promise<AuthSession | null> {
-  try {
-    const response = await fetch("/api/backend/api/auth/refresh", {
-      method: "POST",
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
-      cache: "no-store",
-      signal,
-    });
-    if (response.status === 204 || !response.ok) {
-      if (generation === authGeneration) {
-        clearAuthSession();
+  return withAuthCookieLock(async () => {
+    try {
+      const response = await fetch("/api/backend/api/auth/refresh", {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+        cache: "no-store",
+        signal,
+      });
+      if (response.status === 204 || !response.ok) {
+        if (generation === authGeneration) {
+          clearAuthSession();
+        }
+        return null;
+      }
+      const session = await response.json() as AuthSession;
+      if (generation !== authGeneration) return null;
+      setAuthSession(session);
+      return session;
+    } catch {
+      if (signal.aborted || generation !== authGeneration) {
+        return null;
       }
       return null;
     }
-    const session = await response.json() as AuthSession;
-    if (generation !== authGeneration) return null;
-    setAuthSession(session);
-    return session;
-  } catch {
-    if (signal.aborted || generation !== authGeneration) {
-      return null;
-    }
-    return null;
-  }
+  });
 }
 
 export function refreshSession(): Promise<AuthSession | null> {
+  // A refresh started after logout would hand back a session the user just ended.
+  if (logoutInFlight) return logoutInFlight.then(() => null);
   const generation = authGeneration;
   if (refreshInFlight?.generation === generation) {
     return refreshInFlight.promise;
@@ -139,6 +181,11 @@ export function refreshSession(): Promise<AuthSession | null> {
   const promise = performRefresh(generation, controller.signal);
   const operation = { generation, controller, promise };
   refreshInFlight = operation;
+  const settled = promise.then(() => undefined, () => undefined);
+  refreshSettled = settled;
+  void settled.finally(() => {
+    if (refreshSettled === settled) refreshSettled = null;
+  });
   void promise.finally(() => {
     if (refreshInFlight === operation) {
       refreshInFlight = null;

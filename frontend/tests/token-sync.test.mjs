@@ -194,6 +194,76 @@ test("a network error during refresh does not clear an existing session", async 
   }
 });
 
+test("logout waits for an already-started refresh before clearing the cookie", async () => {
+  const api = await loadAuthModule();
+  const refreshResponse = deferred();
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = (url, init) => {
+    calls.push(String(url));
+    if (String(url).endsWith("/api/auth/refresh")) {
+      return refreshResponse.promise;
+    }
+    assert.equal(init.credentials, "same-origin");
+    return Promise.resolve(new Response(null, { status: 204 }));
+  };
+
+  try {
+    const refresh = api.refreshSession();
+    api.clearAuthSession();
+    const logout = api.logoutRequest();
+    await Promise.resolve();
+    assert.deepEqual(calls, ["/api/backend/api/auth/refresh"]);
+
+    refreshResponse.resolve(Response.json({
+      accessToken: "stale-refresh",
+      expiresIn: 900,
+      user: { id: 1, username: "student", displayName: "Student", role: "STUDENT" },
+    }));
+    assert.equal(await refresh, null);
+    await logout;
+    assert.deepEqual(calls, [
+      "/api/backend/api/auth/refresh",
+      "/api/backend/api/auth/logout",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a quick new login waits until the old logout response finishes", async () => {
+  const api = await loadAuthModule();
+  const logoutResponse = deferred();
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = (url) => {
+    calls.push(String(url));
+    if (String(url).endsWith("/api/auth/logout")) return logoutResponse.promise;
+    return Promise.resolve(Response.json({
+      accessToken: "new-login",
+      expiresIn: 900,
+      user: { id: 2, username: "teacher", displayName: "Teacher", role: "TEACHER" },
+    }));
+  };
+
+  try {
+    const logout = api.logoutRequest();
+    const login = api.loginRequest("teacher", "teacher123");
+    await Promise.resolve();
+    assert.deepEqual(calls, ["/api/backend/api/auth/logout"]);
+
+    logoutResponse.resolve(new Response(null, { status: 204 }));
+    await logout;
+    assert.equal((await login).accessToken, "new-login");
+    assert.deepEqual(calls, [
+      "/api/backend/api/auth/logout",
+      "/api/backend/api/auth/login",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("backend proxy forwards the cookie and rewrites the refresh cookie path", async () => {
   const [, , proxySrc] = await authSources();
 
