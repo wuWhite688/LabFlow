@@ -135,11 +135,11 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }  # 填入 JWT_SECRET�
 .\scripts\start-middleware.ps1
 .\scripts\start-production.ps1
 # health: http://127.0.0.1:18080/actuator/health
-.\scripts\verify-production.ps1
+.\scripts\verify-local.ps1
 .\scripts\stop-production.ps1 -AlsoMiddleware
 ```
 
-`verify-production.ps1` 会起栈、查 health（db/redis/rabbit）、确认 Flyway、打 Redis 锁日志和 Rabbit 过期调度日志。本机 HTTP 验证会临时关掉 Refresh Cookie 的 `Secure`，不改 `.env`。
+`verify-local.ps1` 会起栈、查 health（db/redis/rabbit）、确认 Flyway、打 Redis 锁日志和 Rabbit 过期调度日志。本机 HTTP 验证会临时关掉 Refresh Cookie 的 `Secure`，不改 `.env`。
 
 没有 Docker Desktop 时，脚本会走 WSL Ubuntu Docker，并写 `.runtime/wsl-keepalive.pid` 防止发行版休眠。
 

@@ -1,3 +1,10 @@
+# Local stack verification only. Not for a deployed environment.
+#
+# This script enables the demo accounts (LABOPS_DEMO_USERS) for its own process
+# so it can exercise the authenticated paths. Pointing it at a real deployment
+# would either fail every login, or worse, tempt someone to enable demo accounts
+# there to make it pass.
+
 param(
     [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
     [int]$ServerPort = 0,
