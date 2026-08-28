@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import com.arthur.labops.equipment.EquipmentStatusService;
 import com.arthur.labops.reservation.ReservationRepository;
+import com.arthur.labops.reservation.ReservationStatuses;
 
 /**
  * DB 兜底扫描：即便本地定时或 RabbitMQ 延时消息失败，也能过期待审批预约，并同步设备状态。
@@ -45,7 +46,7 @@ public class ReservationExpiryCompensationJob {
             }
         }
 
-        List<Long> equipmentIds = new ArrayList<>(reservationRepository.findEquipmentIdsWithApprovedReservations());
+        List<Long> equipmentIds = new ArrayList<>(reservationRepository.findEquipmentIdsWithReservationsInStatus(ReservationStatuses.CONFIRMED));
         for (Long equipmentId : equipmentIds) {
             try {
                 equipmentStatusService.sync(equipmentId);

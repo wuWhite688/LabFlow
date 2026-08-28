@@ -55,6 +55,13 @@ public class Reservation {
     private Instant expiresAt;
 
     /**
+     * Deadline for the short payment window. Only set while the reservation is
+     * AWAITING_PAYMENT; cleared once the money question is settled either way.
+     */
+    @Column(name = "payment_deadline")
+    private Instant paymentDeadline;
+
+    /**
      * Second-line lost-update detection. PESSIMISTIC_WRITE on state changes remains
      * the primary correctness guarantee; {@code @Version} makes concurrent writers
      * fail on any database, including H2 where {@code FOR UPDATE} does not serialize.
@@ -88,10 +95,53 @@ public class Reservation {
     public ReservationStatus getStatus() { return status; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getExpiresAt() { return expiresAt; }
+    public Instant getPaymentDeadline() { return paymentDeadline; }
     public long getVersion() { return version; }
 
     public void approve() {
         status = ReservationStatus.APPROVED;
+    }
+
+    /** Approved, but the equipment costs money: hold the slot until {@code deadline}. */
+    public void awaitPayment(Instant deadline) {
+        status = ReservationStatus.AWAITING_PAYMENT;
+        paymentDeadline = deadline;
+    }
+
+    public void markPaid() {
+        status = ReservationStatus.PAID;
+        paymentDeadline = null;
+    }
+
+    /**
+     * Cancelled after payment. The slot is released immediately — a refund in
+     * flight is no reason to keep the equipment blocked — but the reservation
+     * stays open until the refund callback confirms it.
+     */
+    public void beginRefund() {
+        status = ReservationStatus.REFUNDING;
+        paymentDeadline = null;
+    }
+
+    /** The refund landed; the reservation is finally closed. */
+    public void completeRefund() {
+        status = ReservationStatus.CANCELLED;
+    }
+
+    /**
+     * Closes an unpaid reservation whose payment window elapsed and returns the
+     * slot. Same shape as {@link #expireIfPending(Instant)}: the caller holds the
+     * row lock, and the guard re-checks state so a late timer cannot undo a
+     * payment that landed first.
+     */
+    public boolean closeIfPaymentWindowElapsed(Instant now) {
+        if (status == ReservationStatus.AWAITING_PAYMENT
+                && paymentDeadline != null && !paymentDeadline.isAfter(now)) {
+            status = ReservationStatus.EXPIRED;
+            paymentDeadline = null;
+            return true;
+        }
+        return false;
     }
 
     public void reject() {

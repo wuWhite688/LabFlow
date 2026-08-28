@@ -13,7 +13,8 @@ public record EquipmentResponse(
         String responsiblePerson,
         LocalDate purchaseDate,
         String description,
-        EquipmentStatus status
+        EquipmentStatus status,
+        long hourlyPriceCents
 ) {
     static EquipmentResponse from(Equipment equipment) {
         return new EquipmentResponse(
@@ -27,6 +28,7 @@ public record EquipmentResponse(
                 equipment.getResponsiblePerson(),
                 equipment.getPurchaseDate(),
                 equipment.getDescription(),
-                equipment.getStatus());
+                equipment.getStatus(),
+                equipment.getHourlyPriceCents());
     }
 }

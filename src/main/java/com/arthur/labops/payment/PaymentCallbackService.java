@@ -1,0 +1,116 @@
+package com.arthur.labops.payment;
+
+import java.time.Instant;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.arthur.labops.audit.AuditLogService;
+import com.arthur.labops.common.BusinessException;
+import com.arthur.labops.equipment.EquipmentRepository;
+import com.arthur.labops.equipment.EquipmentStatusService;
+import com.arthur.labops.reservation.Reservation;
+import com.arthur.labops.reservation.ReservationRepository;
+import com.arthur.labops.reservation.ReservationStatus;
+import com.arthur.labops.reservation.expiry.ReservationDeadlineEvent;
+import com.arthur.labops.reservation.expiry.ReservationDeadlineKind;
+
+/**
+ * The single ingest point for channel callbacks, whether they arrive over HTTP or
+ * straight from the in-process simulator.
+ *
+ * <p>Locks in the platform-wide order — Equipment &rarr; Reservation &rarr; PaymentOrder.
+ * The payment order is appended to the existing Equipment &rarr; Reservation order
+ * rather than taken first: a callback and a cancellation touch the same three
+ * rows from opposite ends of the system, and taking the order row first here
+ * would reintroduce exactly the ABBA cycle the reservation path already fixed.
+ */
+@Service
+public class PaymentCallbackService {
+
+    private static final Logger log = LoggerFactory.getLogger(PaymentCallbackService.class);
+
+    private final PaymentOrderRepository orderRepository;
+    private final PaymentTransactionRepository transactionRepository;
+    private final ReservationRepository reservationRepository;
+    private final EquipmentRepository equipmentRepository;
+    private final EquipmentStatusService equipmentStatusService;
+    private final AuditLogService auditLogService;
+    private final ApplicationEventPublisher eventPublisher;
+
+    public PaymentCallbackService(PaymentOrderRepository orderRepository,
+                                  PaymentTransactionRepository transactionRepository,
+                                  ReservationRepository reservationRepository,
+                                  EquipmentRepository equipmentRepository,
+                                  EquipmentStatusService equipmentStatusService,
+                                  AuditLogService auditLogService,
+                                  ApplicationEventPublisher eventPublisher) {
+        this.orderRepository = orderRepository;
+        this.transactionRepository = transactionRepository;
+        this.reservationRepository = reservationRepository;
+        this.equipmentRepository = equipmentRepository;
+        this.equipmentStatusService = equipmentStatusService;
+        this.auditLogService = auditLogService;
+        this.eventPublisher = eventPublisher;
+    }
+
+    @Transactional
+    public PaymentCallbackResult handle(PaymentCallbackRequest request) {
+        PaymentOrder unlocked = orderRepository.findByOrderNo(request.orderNo())
+                .orElseThrow(() -> new BusinessException(
+                        "PAYMENT_ORDER_NOT_FOUND", "支付订单不存在", HttpStatus.NOT_FOUND));
+
+        equipmentRepository.findByIdForUpdate(unlocked.getEquipmentId());
+        Reservation reservation = reservationRepository.findByIdForUpdate(unlocked.getReservationId())
+                .orElseThrow(() -> new BusinessException(
+                        "RESERVATION_NOT_FOUND", "预约不存在", HttpStatus.NOT_FOUND));
+        PaymentOrder order = orderRepository.findByOrderNoForUpdate(request.orderNo())
+                .orElseThrow(() -> new BusinessException(
+                        "PAYMENT_ORDER_NOT_FOUND", "支付订单不存在", HttpStatus.NOT_FOUND));
+
+        transactionRepository.save(new PaymentTransaction(
+                request.orderNo(),
+                request.idempotencyKey(),
+                request.type(),
+                request.amountCents(),
+                request.channelTxnId(),
+                request.status(),
+                request.occurredAt()));
+
+        applyToLedgerAndReservation(request, order, reservation);
+        equipmentStatusService.sync(order.getEquipmentId());
+
+        log.info("Payment callback recorded orderNo={} type={} amountCents={} orderStatus={}",
+                request.orderNo(), request.type(), request.amountCents(), order.getStatus());
+        return new PaymentCallbackResult(request.orderNo(), true, order.getStatus());
+    }
+
+    private void applyToLedgerAndReservation(PaymentCallbackRequest request,
+                                             PaymentOrder order,
+                                             Reservation reservation) {
+        if (request.type() == PaymentTransactionType.PAYMENT) {
+            Instant paymentDeadline = reservation.getPaymentDeadline();
+            order.applyPayment(request.amountCents());
+            if (reservation.getStatus() == ReservationStatus.AWAITING_PAYMENT) {
+                reservation.markPaid();
+                eventPublisher.publishEvent(ReservationDeadlineEvent.disarm(
+                        ReservationDeadlineKind.PAYMENT, reservation.getId(), paymentDeadline));
+            }
+            auditLogService.recordSystem("PAYMENT_SUCCEEDED", "RESERVATION", reservation.getId(),
+                    "支付成功 订单号 " + order.getOrderNo() + "，金额 " + request.amountCents() + " 分");
+        } else {
+            order.applyRefund(request.amountCents());
+            // A partial refund leaves a PAID reservation paid. Only a refund that
+            // clears the balance closes a cancellation that is waiting on it.
+            if (reservation.getStatus() == ReservationStatus.REFUNDING && order.refundableCents() <= 0) {
+                reservation.completeRefund();
+            }
+            auditLogService.recordSystem("REFUND_SUCCEEDED", "RESERVATION", reservation.getId(),
+                    "退款到账 订单号 " + order.getOrderNo() + "，金额 " + request.amountCents() + " 分");
+        }
+    }
+}

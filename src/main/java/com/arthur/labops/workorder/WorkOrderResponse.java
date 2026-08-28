@@ -14,7 +14,8 @@ public record WorkOrderResponse(
         Long assigneeId,
         Instant createdAt,
         Instant updatedAt,
-        Instant resolvedAt
+        Instant resolvedAt,
+        WorkOrderCategory category
 ) {
     static WorkOrderResponse from(FaultWorkOrder workOrder) {
         return new WorkOrderResponse(
@@ -29,6 +30,7 @@ public record WorkOrderResponse(
                 workOrder.getAssigneeId(),
                 workOrder.getCreatedAt(),
                 workOrder.getUpdatedAt(),
-                workOrder.getResolvedAt());
+                workOrder.getResolvedAt(),
+                workOrder.getCategory());
     }
 }

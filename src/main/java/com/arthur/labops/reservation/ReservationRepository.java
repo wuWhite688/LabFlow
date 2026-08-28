@@ -35,9 +35,9 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
             @Param("requestedStart") Instant requestedStart,
             @Param("excludeId") Long excludeId);
 
-    boolean existsByEquipmentIdAndStatusAndStartTimeLessThanEqualAndEndTimeGreaterThan(
+    boolean existsByEquipmentIdAndStatusInAndStartTimeLessThanEqualAndEndTimeGreaterThan(
             Long equipmentId,
-            ReservationStatus status,
+            Collection<ReservationStatus> statuses,
             Instant startBoundary,
             Instant endBoundary);
 
@@ -75,8 +75,17 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
 
     @Query("""
             select distinct reservation.equipment.id from Reservation reservation
-            where reservation.status = com.arthur.labops.reservation.ReservationStatus.APPROVED
+            where reservation.status in :statuses
             order by reservation.equipment.id
             """)
-    java.util.List<Long> findEquipmentIdsWithApprovedReservations();
+    java.util.List<Long> findEquipmentIdsWithReservationsInStatus(
+            @Param("statuses") Collection<ReservationStatus> statuses);
+
+    @Query("""
+            select reservation.id from Reservation reservation
+            where reservation.status = com.arthur.labops.reservation.ReservationStatus.AWAITING_PAYMENT
+              and reservation.paymentDeadline <= :now
+            order by reservation.id
+            """)
+    java.util.List<Long> findOverdueAwaitingPaymentIds(@Param("now") Instant now);
 }

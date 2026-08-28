@@ -1,6 +1,5 @@
 package com.arthur.labops.reservation;
 
-import java.util.EnumSet;
 import java.util.Set;
 import java.time.Duration;
 import java.time.Instant;
@@ -19,7 +18,8 @@ import com.arthur.labops.equipment.Equipment;
 import com.arthur.labops.equipment.EquipmentRepository;
 import com.arthur.labops.equipment.EquipmentStatus;
 import com.arthur.labops.equipment.EquipmentStatusService;
-import com.arthur.labops.reservation.expiry.ReservationCreatedEvent;
+import com.arthur.labops.reservation.expiry.ReservationDeadlineEvent;
+import com.arthur.labops.reservation.expiry.ReservationDeadlineKind;
 import com.arthur.labops.audit.AuditLogService;
 import com.arthur.labops.user.CurrentUserService;
 import com.arthur.labops.user.PlatformUser;
@@ -29,12 +29,11 @@ import com.arthur.labops.user.UserRole;
 @Service
 public class ReservationService {
 
-    private static final Set<ReservationStatus> QUOTA_STATUSES =
-            EnumSet.of(ReservationStatus.PENDING, ReservationStatus.APPROVED);
+    /** @see ReservationStatuses#QUOTA */
+    private static final Set<ReservationStatus> QUOTA_STATUSES = ReservationStatuses.QUOTA;
 
-    /** Approved rows occupy the calendar slot. Overlapping PENDING requests may coexist. */
-    private static final Set<ReservationStatus> OCCUPIED_STATUSES =
-            EnumSet.of(ReservationStatus.APPROVED);
+    /** @see ReservationStatuses#OCCUPIED */
+    private static final Set<ReservationStatus> OCCUPIED_STATUSES = ReservationStatuses.OCCUPIED;
 
     private final EquipmentRepository equipmentRepository;
     private final ReservationRepository reservationRepository;
@@ -44,6 +43,8 @@ public class ReservationService {
     private final Duration maxDuration;
     private final Duration maxAdvance;
     private final int maxActivePerUser;
+    private final Duration paymentWindow;
+    private final ReservationPaymentGateway paymentGateway;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final EquipmentStatusService equipmentStatusService;
@@ -56,6 +57,8 @@ public class ReservationService {
                               @Value("${labops.reservation-max-duration:12h}") Duration maxDuration,
                               @Value("${labops.reservation-max-advance:30d}") Duration maxAdvance,
                               @Value("${labops.reservation-max-active-per-user:20}") int maxActivePerUser,
+                              @Value("${labops.payment.window:10m}") Duration paymentWindow,
+                              ReservationPaymentGateway paymentGateway,
                               CurrentUserService currentUserService,
                               AuditLogService auditLogService,
                               EquipmentStatusService equipmentStatusService) {
@@ -67,6 +70,8 @@ public class ReservationService {
         this.maxDuration = maxDuration;
         this.maxAdvance = maxAdvance;
         this.maxActivePerUser = maxActivePerUser;
+        this.paymentWindow = paymentWindow;
+        this.paymentGateway = paymentGateway;
         this.currentUserService = currentUserService;
         this.auditLogService = auditLogService;
         this.equipmentStatusService = equipmentStatusService;
@@ -110,7 +115,8 @@ public class ReservationService {
         Reservation saved = reservationRepository.save(reservation);
         auditLogService.record(requester, "RESERVATION_CREATED", "RESERVATION", saved.getId(),
                 "预约设备 " + equipment.getCode());
-        eventPublisher.publishEvent(new ReservationCreatedEvent(saved.getId(), saved.getExpiresAt()));
+        eventPublisher.publishEvent(ReservationDeadlineEvent.arm(
+                ReservationDeadlineKind.APPROVAL, saved.getId(), saved.getExpiresAt()));
         return ReservationResponse.from(saved);
     }
 
@@ -140,7 +146,7 @@ public class ReservationService {
                     reservation.getStartTime(),
                     reservation.getEndTime(),
                     reservation.getId());
-            reservation.approve();
+            approveOrBill(reservation, equipment);
             equipmentStatusService.sync(equipment.getId());
         } else if (request.decision() == ReservationStatus.REJECTED) {
             reservation.reject();
@@ -151,8 +157,49 @@ public class ReservationService {
                     HttpStatus.BAD_REQUEST);
         }
         auditLogService.record(actor, "RESERVATION_" + request.decision().name(),
-                "RESERVATION", reservation.getId(), "预约审批");
+                "RESERVATION", reservation.getId(), decisionDetail(reservation));
+        // Decided either way, so the approval deadline is spent. Drop it rather
+        // than leaving it parked until its original instant.
+        eventPublisher.publishEvent(ReservationDeadlineEvent.disarm(
+                ReservationDeadlineKind.APPROVAL, reservation.getId(), reservation.getExpiresAt()));
         return ReservationResponse.from(reservation);
+    }
+
+    /**
+     * Free equipment goes straight to APPROVED, exactly as before payment existed.
+     * Priced equipment stops at AWAITING_PAYMENT: it keeps the slot, but only for
+     * the payment window, and an order is opened for the money.
+     */
+    private void approveOrBill(Reservation reservation, Equipment equipment) {
+        long amountCents = amountCentsFor(reservation, equipment);
+        if (amountCents <= 0) {
+            reservation.approve();
+            return;
+        }
+        Instant deadline = Instant.now().plus(paymentWindow);
+        reservation.awaitPayment(deadline);
+        paymentGateway.openOrder(reservation, amountCents);
+        eventPublisher.publishEvent(ReservationDeadlineEvent.arm(
+                ReservationDeadlineKind.PAYMENT, reservation.getId(), deadline));
+    }
+
+    /**
+     * Price is per hour, charged per started minute and rounded up to the cent so
+     * the platform never under-bills by a rounding error.
+     */
+    private long amountCentsFor(Reservation reservation, Equipment equipment) {
+        long hourlyPriceCents = equipment.getHourlyPriceCents();
+        if (hourlyPriceCents <= 0) {
+            return 0L;
+        }
+        long minutes = Duration.between(reservation.getStartTime(), reservation.getEndTime()).toMinutes();
+        return Math.ceilDiv(hourlyPriceCents * minutes, 60L);
+    }
+
+    private String decisionDetail(Reservation reservation) {
+        return reservation.getStatus() == ReservationStatus.AWAITING_PAYMENT
+                ? "预约审批通过，等待支付"
+                : "预约审批";
     }
 
     @Transactional
@@ -163,15 +210,44 @@ public class ReservationService {
             throw new BusinessException(
                     "RESERVATION_NOT_OWNED", "只能取消自己的预约", HttpStatus.FORBIDDEN);
         }
-        if (reservation.getStatus() != ReservationStatus.PENDING
-                && reservation.getStatus() != ReservationStatus.APPROVED) {
-            throw new BusinessException(
+        Long equipmentId = reservation.getEquipment().getId();
+        Instant paymentDeadline = reservation.getPaymentDeadline();
+        String detail;
+        switch (reservation.getStatus()) {
+            case PENDING -> {
+                reservation.cancel();
+                eventPublisher.publishEvent(ReservationDeadlineEvent.disarm(
+                        ReservationDeadlineKind.APPROVAL, reservation.getId(), reservation.getExpiresAt()));
+                detail = "取消预约";
+            }
+            case APPROVED -> {
+                reservation.cancel();
+                detail = "取消预约";
+            }
+            case AWAITING_PAYMENT -> {
+                // No money has moved, so this closes outright — but the payment
+                // deadline is now dead weight and has to go with it.
+                reservation.cancel();
+                paymentGateway.closeUnpaidOrder(reservation.getId());
+                eventPublisher.publishEvent(ReservationDeadlineEvent.disarm(
+                        ReservationDeadlineKind.PAYMENT, reservation.getId(), paymentDeadline));
+                detail = "取消未支付预约，订单已关闭";
+            }
+            case PAID -> {
+                // Slot is released now; the reservation stays open until the refund
+                // callback lands, so the books never show a cancelled-and-unrefunded
+                // reservation as closed.
+                reservation.beginRefund();
+                paymentGateway.requestFullRefund(reservation.getId());
+                detail = "取消已支付预约，退款处理中";
+            }
+            case REFUNDING -> throw new BusinessException(
+                    "RESERVATION_REFUND_IN_PROGRESS", "退款处理中，无需重复取消", HttpStatus.CONFLICT);
+            default -> throw new BusinessException(
                     "RESERVATION_NOT_CANCELLABLE", "当前预约状态不能取消", HttpStatus.CONFLICT);
         }
-        Long equipmentId = reservation.getEquipment().getId();
-        reservation.cancel();
         equipmentStatusService.sync(equipmentId);
-        auditLogService.record(actor, "RESERVATION_CANCELLED", "RESERVATION", reservation.getId(), "取消预约");
+        auditLogService.record(actor, "RESERVATION_CANCELLED", "RESERVATION", reservation.getId(), detail);
         return ReservationResponse.from(reservation);
     }
 
@@ -180,9 +256,10 @@ public class ReservationService {
         PlatformUser actor = currentUserService.getRequiredUser();
         assertTeacherOrAdmin(actor);
         Reservation reservation = findForStateChange(reservationId);
-        if (reservation.getStatus() != ReservationStatus.APPROVED) {
+        // APPROVED (free) and PAID (settled) are the two confirmed forms.
+        if (!ReservationStatuses.CONFIRMED.contains(reservation.getStatus())) {
             throw new BusinessException(
-                    "RESERVATION_NOT_COMPLETABLE", "只有已批准预约可以完成", HttpStatus.CONFLICT);
+                    "RESERVATION_NOT_COMPLETABLE", "只有已批准或已支付预约可以完成", HttpStatus.CONFLICT);
         }
         Long equipmentId = reservation.getEquipment().getId();
         reservation.complete();
@@ -208,7 +285,8 @@ public class ReservationService {
         } else if (actor.getRole() == UserRole.TECHNICIAN) {
             // 维修员侧重点是设备可用性，只看已批准/进行相关状态的排期
             specification = specification.and((root, query, builder) ->
-                    root.get("status").in(ReservationStatus.PENDING, ReservationStatus.APPROVED));
+                    root.get("status").in(ReservationStatus.PENDING, ReservationStatus.APPROVED,
+                            ReservationStatus.AWAITING_PAYMENT, ReservationStatus.PAID));
         }
         return reservationRepository.findAll(specification, pageable).map(ReservationResponse::from);
     }

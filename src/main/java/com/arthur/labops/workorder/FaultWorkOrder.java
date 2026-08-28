@@ -72,11 +72,44 @@ public class FaultWorkOrder {
     @Column(name = "equipment_taken_offline", nullable = false)
     private boolean equipmentTakenOffline;
 
+    /**
+     * What kind of problem this ticket represents. Reconciliation reuses this
+     * table, and everything that predates it is a real equipment fault.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private WorkOrderCategory category = WorkOrderCategory.FAULT;
+
+    /**
+     * Stable identity of the reconciliation discrepancy this ticket was raised
+     * for, null for fault reports. Carries a unique index: re-running
+     * reconciliation for the same day must not pile up duplicates, and the index
+     * is what enforces that rather than a read-then-write check.
+     */
+    @Column(name = "discrepancy_key", length = 160)
+    private String discrepancyKey;
+
     @Version
     private long version;
 
     protected FaultWorkOrder() {
     }
+
+    /**
+     * Reconciliation ticket. Never takes the equipment offline: a books problem
+     * says nothing about whether the microscope works.
+     */
+    public static FaultWorkOrder discrepancy(Equipment equipment, Long systemReporterId, String discrepancyKey,
+                                             String title, String description, WorkOrderPriority priority) {
+        FaultWorkOrder workOrder = new FaultWorkOrder(
+                equipment, systemReporterId, SYSTEM_REPORTER_NAME, title, description, priority);
+        workOrder.category = WorkOrderCategory.PAYMENT_DISCREPANCY;
+        workOrder.discrepancyKey = discrepancyKey;
+        return workOrder;
+    }
+
+    /** Display name for tickets the platform raises for itself. */
+    public static final String SYSTEM_REPORTER_NAME = "对账任务";
 
     public FaultWorkOrder(Equipment equipment, Long reporterId, String reporterName,
                           String title, String description, WorkOrderPriority priority) {
@@ -126,4 +159,6 @@ public class FaultWorkOrder {
     public Instant getUpdatedAt() { return updatedAt; }
     public Instant getResolvedAt() { return resolvedAt; }
     public boolean isEquipmentTakenOffline() { return equipmentTakenOffline; }
+    public WorkOrderCategory getCategory() { return category; }
+    public String getDiscrepancyKey() { return discrepancyKey; }
 }

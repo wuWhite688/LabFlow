@@ -82,7 +82,8 @@ public class WorkOrderService {
             throw new BusinessException(
                     "EQUIPMENT_RETIRED", "已退役设备不能创建故障工单", HttpStatus.CONFLICT);
         }
-        if (workOrderRepository.existsByEquipmentIdAndStatusIn(equipment.getId(), ACTIVE_STATUSES)) {
+        if (workOrderRepository.existsByEquipmentIdAndCategoryAndStatusIn(
+                equipment.getId(), WorkOrderCategory.FAULT, ACTIVE_STATUSES)) {
             throw new BusinessException(
                     "ACTIVE_WORK_ORDER_EXISTS", "该设备已有未关闭的故障工单", HttpStatus.CONFLICT);
         }

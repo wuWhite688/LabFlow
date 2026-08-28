@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.arthur.labops.reservation.ReservationRepository;
-import com.arthur.labops.reservation.ReservationStatus;
+import com.arthur.labops.reservation.ReservationStatuses;
 import com.arthur.labops.workorder.FaultWorkOrderRepository;
 import com.arthur.labops.workorder.WorkOrderStatus;
 
@@ -53,8 +53,12 @@ public class EquipmentStatusService {
             equipment.forceStatus(EquipmentStatus.MAINTENANCE);
             return;
         }
-        if (reservationRepository.existsByEquipmentIdAndStatusAndStartTimeLessThanEqualAndEndTimeGreaterThan(
-                equipmentId, ReservationStatus.APPROVED, now, now)) {
+        // APPROVED (free) and PAID (settled) are the two confirmed forms of the same
+        // thing. AWAITING_PAYMENT holds the slot but must not read as IN_USE — nobody
+        // is using equipment that has not been paid for yet, and letting it do so
+        // would block retirement and fault reporting on an order that may time out.
+        if (reservationRepository.existsByEquipmentIdAndStatusInAndStartTimeLessThanEqualAndEndTimeGreaterThan(
+                equipmentId, ReservationStatuses.CONFIRMED, now, now)) {
             equipment.forceStatus(EquipmentStatus.IN_USE);
             return;
         }

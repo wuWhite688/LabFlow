@@ -52,6 +52,13 @@ public class Equipment {
     @Column(nullable = false, length = 30)
     private EquipmentStatus status;
 
+    /**
+     * Reservation price per hour, in cents. Zero means free, and a free
+     * reservation never enters the payment flow at all.
+     */
+    @Column(name = "hourly_price_cents", nullable = false)
+    private long hourlyPriceCents;
+
     @Version
     private long version;
 
@@ -96,6 +103,15 @@ public class Equipment {
     public LocalDate getPurchaseDate() { return purchaseDate; }
     public String getDescription() { return description; }
     public EquipmentStatus getStatus() { return status; }
+    public long getHourlyPriceCents() { return hourlyPriceCents; }
+
+    public void setHourlyPriceCents(long hourlyPriceCents) {
+        if (hourlyPriceCents < 0) {
+            throw new IllegalArgumentException("设备价格不能为负数");
+        }
+        this.hourlyPriceCents = hourlyPriceCents;
+        this.updatedAt = Instant.now();
+    }
 
     public void markMaintenance() {
         if (status == EquipmentStatus.RETIRED) {

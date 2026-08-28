@@ -1,6 +1,6 @@
 package com.arthur.labops.equipment;
 
-import java.util.EnumSet;
+import java.util.Set;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -15,14 +15,15 @@ import com.arthur.labops.audit.AuditLogService;
 import com.arthur.labops.reservation.Reservation;
 import com.arthur.labops.reservation.ReservationRepository;
 import com.arthur.labops.reservation.ReservationStatus;
+import com.arthur.labops.reservation.ReservationStatuses;
 import com.arthur.labops.user.CurrentUserService;
 import com.arthur.labops.user.PlatformUser;
 
 @Service
 public class EquipmentService {
 
-    private static final EnumSet<ReservationStatus> OPEN_RESERVATIONS = EnumSet.of(
-            ReservationStatus.PENDING, ReservationStatus.APPROVED);
+    /** Unsettled reservations block retirement — including the ones with money in flight. */
+    private static final Set<ReservationStatus> OPEN_RESERVATIONS = ReservationStatuses.OPEN;
 
     private final EquipmentRepository equipmentRepository;
     private final ReservationRepository reservationRepository;
@@ -59,6 +60,9 @@ public class EquipmentService {
                 normalize(request.responsiblePerson()),
                 request.purchaseDate(),
                 normalize(request.description()));
+        if (request.hourlyPriceCents() != null) {
+            equipment.setHourlyPriceCents(request.hourlyPriceCents());
+        }
         Equipment saved = equipmentRepository.save(equipment);
         auditLogService.record(actor, "EQUIPMENT_CREATED", "EQUIPMENT", saved.getId(),
                 "创建设备 " + saved.getCode());
@@ -82,6 +86,9 @@ public class EquipmentService {
                 normalize(request.responsiblePerson()),
                 request.purchaseDate(),
                 normalize(request.description()));
+        if (request.hourlyPriceCents() != null) {
+            equipment.setHourlyPriceCents(request.hourlyPriceCents());
+        }
         auditLogService.record(actor, "EQUIPMENT_UPDATED", "EQUIPMENT", equipment.getId(),
                 "更新设备 " + equipment.getCode());
         return EquipmentResponse.from(equipment);
