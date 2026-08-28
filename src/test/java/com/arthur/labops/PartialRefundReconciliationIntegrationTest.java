@@ -35,7 +35,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * differ the moment any refund exists, and a reconciliation that flags it will
  * bury the real breaks under noise.
  */
-@SpringBootTest(properties = "labops.payment.channel.callback-mode=IMMEDIATE")
+@SpringBootTest(properties = {
+        "labops.payment.channel.callback-mode=IMMEDIATE",
+        "labops.payment.channel.bill-directory=target/test-channel-bills/partial-refund"
+})
 @AutoConfigureMockMvc
 class PartialRefundReconciliationIntegrationTest {
 
@@ -78,10 +81,6 @@ class PartialRefundReconciliationIntegrationTest {
 
     @Test
     void halfRefundedOrderStillReconcilesAndRaisesNoTicket() throws Exception {
-        long ticketsBefore = workOrderRepository.countByCategoryAndStatusIn(
-                WorkOrderCategory.PAYMENT_DISCREPANCY, java.util.EnumSet.allOf(
-                        com.arthur.labops.workorder.WorkOrderStatus.class));
-
         Long equipmentId = scenario.createPricedEquipment("PAY-HALF", HOURLY_PRICE_CENTS);
         Long reservationId = scenario.createReservation(equipmentId, 2);
         scenario.approve(reservationId);
@@ -109,10 +108,13 @@ class PartialRefundReconciliationIntegrationTest {
         assertThat(report.discrepancies())
                 .as("payment minus refund matches on both sides, so nothing is out of balance")
                 .noneMatch(discrepancy -> discrepancy.orderNo().equals(orderNo));
-        assertThat(workOrderRepository.countByCategoryAndStatusIn(
-                WorkOrderCategory.PAYMENT_DISCREPANCY, java.util.EnumSet.allOf(
-                        com.arthur.labops.workorder.WorkOrderStatus.class)))
+        // Scoped to this order on purpose: every test class shares one in-memory
+        // database, so a global ticket count would be asserting on other tests'
+        // leftovers rather than on this scenario.
+        assertThat(workOrderRepository.findAll())
                 .as("a balanced partial refund must not raise a discrepancy ticket")
-                .isEqualTo(ticketsBefore);
+                .filteredOn(workOrder -> workOrder.getCategory() == WorkOrderCategory.PAYMENT_DISCREPANCY)
+                .noneMatch(workOrder -> workOrder.getDiscrepancyKey() != null
+                        && workOrder.getDiscrepancyKey().contains(orderNo));
     }
 }

@@ -19,14 +19,14 @@ public class PaymentController {
 
     public static final String CALLBACK_TOKEN_HEADER = "X-Channel-Token";
 
-    private final PaymentCallbackService callbackService;
+    private final PaymentCallbackIngest callbackIngest;
     private final PaymentQueryService queryService;
     private final PaymentProperties properties;
 
-    public PaymentController(PaymentCallbackService callbackService,
+    public PaymentController(PaymentCallbackIngest callbackIngest,
                              PaymentQueryService queryService,
                              PaymentProperties properties) {
-        this.callbackService = callbackService;
+        this.callbackIngest = callbackIngest;
         this.queryService = queryService;
         this.properties = properties;
     }
@@ -42,7 +42,7 @@ public class PaymentController {
         if (!properties.getCallbackToken().equals(token)) {
             throw new BusinessException("PAYMENT_CALLBACK_UNAUTHORIZED", "渠道回调校验失败", HttpStatus.UNAUTHORIZED);
         }
-        return callbackService.handle(request);
+        return callbackIngest.ingest(request);
     }
 
     @GetMapping("/orders/{orderNo}")

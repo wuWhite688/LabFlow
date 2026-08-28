@@ -45,6 +45,7 @@ public class ReservationService {
     private final int maxActivePerUser;
     private final Duration paymentWindow;
     private final ReservationPaymentGateway paymentGateway;
+    private final ReservationClosureService closureService;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final EquipmentStatusService equipmentStatusService;
@@ -59,6 +60,7 @@ public class ReservationService {
                               @Value("${labops.reservation-max-active-per-user:20}") int maxActivePerUser,
                               @Value("${labops.payment.window:10m}") Duration paymentWindow,
                               ReservationPaymentGateway paymentGateway,
+                              ReservationClosureService closureService,
                               CurrentUserService currentUserService,
                               AuditLogService auditLogService,
                               EquipmentStatusService equipmentStatusService) {
@@ -72,6 +74,7 @@ public class ReservationService {
         this.maxActivePerUser = maxActivePerUser;
         this.paymentWindow = paymentWindow;
         this.paymentGateway = paymentGateway;
+        this.closureService = closureService;
         this.currentUserService = currentUserService;
         this.auditLogService = auditLogService;
         this.equipmentStatusService = equipmentStatusService;
@@ -210,42 +213,19 @@ public class ReservationService {
             throw new BusinessException(
                     "RESERVATION_NOT_OWNED", "只能取消自己的预约", HttpStatus.FORBIDDEN);
         }
-        Long equipmentId = reservation.getEquipment().getId();
-        Instant paymentDeadline = reservation.getPaymentDeadline();
-        String detail;
-        switch (reservation.getStatus()) {
-            case PENDING -> {
-                reservation.cancel();
-                eventPublisher.publishEvent(ReservationDeadlineEvent.disarm(
-                        ReservationDeadlineKind.APPROVAL, reservation.getId(), reservation.getExpiresAt()));
-                detail = "取消预约";
-            }
-            case APPROVED -> {
-                reservation.cancel();
-                detail = "取消预约";
-            }
-            case AWAITING_PAYMENT -> {
-                // No money has moved, so this closes outright — but the payment
-                // deadline is now dead weight and has to go with it.
-                reservation.cancel();
-                paymentGateway.closeUnpaidOrder(reservation.getId());
-                eventPublisher.publishEvent(ReservationDeadlineEvent.disarm(
-                        ReservationDeadlineKind.PAYMENT, reservation.getId(), paymentDeadline));
-                detail = "取消未支付预约，订单已关闭";
-            }
-            case PAID -> {
-                // Slot is released now; the reservation stays open until the refund
-                // callback lands, so the books never show a cancelled-and-unrefunded
-                // reservation as closed.
-                reservation.beginRefund();
-                paymentGateway.requestFullRefund(reservation.getId());
-                detail = "取消已支付预约，退款处理中";
-            }
-            case REFUNDING -> throw new BusinessException(
+        if (reservation.getStatus() == ReservationStatus.REFUNDING) {
+            throw new BusinessException(
                     "RESERVATION_REFUND_IN_PROGRESS", "退款处理中，无需重复取消", HttpStatus.CONFLICT);
-            default -> throw new BusinessException(
+        }
+        Long equipmentId = reservation.getEquipment().getId();
+        ReservationClosure closure = closureService.close(reservation);
+        if (closure == ReservationClosure.NOT_CLOSEABLE) {
+            throw new BusinessException(
                     "RESERVATION_NOT_CANCELLABLE", "当前预约状态不能取消", HttpStatus.CONFLICT);
         }
+        String detail = closure == ReservationClosure.REFUND_PENDING
+                ? "取消已支付预约，退款处理中"
+                : "取消预约";
         equipmentStatusService.sync(equipmentId);
         auditLogService.record(actor, "RESERVATION_CANCELLED", "RESERVATION", reservation.getId(), detail);
         return ReservationResponse.from(reservation);

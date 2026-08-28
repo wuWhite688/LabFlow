@@ -174,11 +174,18 @@ public class SimulatedPaymentChannel {
         return Path.of(properties.getBillDirectory(), "channel-bill-" + settlementDate + ".csv");
     }
 
-    /** Test seam: forget everything. Never called by application code. */
+    /**
+     * Test seam: forget this channel's books. Never called by application code.
+     *
+     * <p>The transaction sequence deliberately keeps counting. A real gateway
+     * never reissues a transaction id, and rewinding it here would hand a fresh
+     * scenario an id the local ledger already holds from an earlier one — which
+     * the idempotency check would then correctly, and very confusingly, treat as
+     * a replay.
+     */
     public synchronized void reset() {
         ledger.clear();
         pending.clear();
         delivered.clear();
-        sequence.set(0);
     }
 }

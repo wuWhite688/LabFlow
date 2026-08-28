@@ -41,7 +41,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * looking at what the ledger actually recorded rather than at what the order was
  * expected to collect, because those two agree here.
  */
-@SpringBootTest(properties = "labops.payment.channel.callback-mode=MANUAL")
+@SpringBootTest(properties = {
+        "labops.payment.channel.callback-mode=MANUAL",
+        "labops.payment.channel.bill-directory=target/test-channel-bills/local-failure"
+})
 @AutoConfigureMockMvc
 class ChannelSuccessLocalFailureReconciliationIntegrationTest {
 

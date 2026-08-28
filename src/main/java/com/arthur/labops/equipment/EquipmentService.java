@@ -113,7 +113,7 @@ public class EquipmentService {
         if (!open.isEmpty()) {
             throw new BusinessException(
                     "EQUIPMENT_HAS_OPEN_RESERVATIONS",
-                    "存在待审批或已批准的预约，请先取消或完成后再退役",
+                    "存在未关闭的预约（含待支付、已支付、退款中），请先取消或完成后再退役",
                     HttpStatus.CONFLICT);
         }
         equipment.retire();

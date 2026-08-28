@@ -90,6 +90,56 @@ class RabbitReservationExpirySchedulerTest {
                 .noneMatch(s -> RabbitReservationExpiryConfiguration.LEGACY_SHARED_DELAY_QUEUE.equals(s.routingKey()));
     }
 
+    /**
+     * The queue holds the pending message, so deleting it is what actually stops a
+     * settled deadline from dead-lettering later. {@code x-expires} does not help
+     * here: it only reaps queues that are already empty.
+     */
+    @Test
+    void cancelDeletesTheDelayQueueThatStillHoldsTheMessage() {
+        Instant expiry = Instant.now().plusSeconds(900);
+        scheduler.schedule(ReservationDeadlineKind.APPROVAL, 55L, expiry);
+        String delayQueue = RabbitReservationExpiryConfiguration.delayQueueName(55L, expiry.toEpochMilli());
+        assertThat(amqpAdmin.byName).containsKey(delayQueue);
+
+        scheduler.cancel(ReservationDeadlineKind.APPROVAL, 55L, expiry);
+
+        assertThat(amqpAdmin.byName).doesNotContainKey(delayQueue);
+        assertThat(amqpAdmin.deletedQueues).containsExactly(delayQueue);
+    }
+
+    /**
+     * Approval and payment deadlines share the dead-letter work queue but must not
+     * share a delay queue namespace, or cancelling one would delete the other's
+     * pending message.
+     */
+    @Test
+    void paymentDeadlineUsesItsOwnQueueNamespaceAndTaggedPayload() {
+        Instant deadline = Instant.now().plusSeconds(600);
+        scheduler.schedule(ReservationDeadlineKind.APPROVAL, 8L, deadline);
+        scheduler.schedule(ReservationDeadlineKind.PAYMENT, 8L, deadline);
+
+        assertThat(amqpAdmin.declaredQueues).hasSize(2);
+        String approvalQueue = amqpAdmin.declaredQueues.get(0).getName();
+        String paymentQueue = amqpAdmin.declaredQueues.get(1).getName();
+        assertThat(approvalQueue).isNotEqualTo(paymentQueue);
+        assertThat(approvalQueue)
+                .startsWith(RabbitExpiryTopologyProperties.DEFAULT_DELAY_QUEUE_PREFIX);
+        assertThat(paymentQueue)
+                .startsWith(RabbitExpiryTopologyProperties.DEFAULT_PAYMENT_DELAY_QUEUE_PREFIX);
+
+        // Untagged payload still means "approval", so messages written by the
+        // previous version keep decoding after this one deploys.
+        assertThat(rabbitTemplate.sends.get(0).body()).isEqualTo("8");
+        assertThat(rabbitTemplate.sends.get(1).body()).isEqualTo("PAYMENT:8");
+
+        scheduler.cancel(ReservationDeadlineKind.APPROVAL, 8L, deadline);
+        assertThat(amqpAdmin.byName)
+                .as("cancelling the approval deadline must leave the payment window armed")
+                .doesNotContainKey(approvalQueue)
+                .containsKey(paymentQueue);
+    }
+
     @Test
     void delayQueueNameEncodesReservationAndExpiry() {
         assertThat(RabbitReservationExpiryConfiguration.delayQueueName(7L, 1_700_000_000_000L))
@@ -114,6 +164,7 @@ class RabbitReservationExpirySchedulerTest {
 
     private static final class RecordingAmqpAdmin implements AmqpAdmin {
         private final List<Queue> declaredQueues = new ArrayList<>();
+        private final List<String> deletedQueues = new ArrayList<>();
         private final Map<String, Queue> byName = new ConcurrentHashMap<>();
 
         @Override
@@ -139,6 +190,7 @@ class RabbitReservationExpirySchedulerTest {
 
         @Override
         public boolean deleteQueue(String queueName) {
+            deletedQueues.add(queueName);
             return byName.remove(queueName) != null;
         }
 

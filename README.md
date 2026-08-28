@@ -38,7 +38,9 @@
 
 ## 能跑通的主流程
 
-**预约：** 选设备与时段 → 进入 `PENDING` → 教师批准为 `APPROVED` → 超时未批自动 `EXPIRED` → 用完后 `COMPLETED`。重叠的待审批可以同时存在；真正占住时段的只有已批准预约。
+**预约（免费设备）：** 选设备与时段 → 进入 `PENDING` → 教师批准为 `APPROVED` → 超时未批自动 `EXPIRED` → 用完后 `COMPLETED`。重叠的待审批可以同时存在；真正占住时段的只有已批准预约。
+
+**预约（计价设备，`hourlyPriceCents > 0`）：** 批准后不是 `APPROVED` 而是 `AWAITING_PAYMENT`——占住时段，但只给一个很短的支付窗口；付了变 `PAID`，窗口内没付就关单、时段归还。取消已支付的预约先进 `REFUNDING`，等退款回调到账才落 `CANCELLED`。
 
 **报修：** 提交工单 → 有权限的报修会取消冲突预约并让设备进入维护 → 管理员派单或维修员接单 → 处理、解决、关闭后设备恢复可预约。
 
@@ -77,8 +79,10 @@ ReservationApplicationService.create
 | 规则 | 行为 |
 | --- | --- |
 | 创建 | 多条时间重叠的 `PENDING` 可以并存 |
-| 配额 | `PENDING + APPROVED` 计入上限（默认 20） |
-| 占时段 | 只有 `APPROVED` 占用设备日历 |
+| 配额 | 所有未关闭状态计入上限（默认 20）：`PENDING`、`APPROVED`、`AWAITING_PAYMENT`、`PAID`、`REFUNDING` |
+| 占时段 | `APPROVED`、`AWAITING_PAYMENT`、`PAID` 占用设备日历；`REFUNDING` **不占**——用户已经取消了，不该让别人为渠道的退款延迟买单 |
+| 设备「使用中」 | 只有 `APPROVED` 和 `PAID` 会把设备推成 `IN_USE`；`AWAITING_PAYMENT` 占时段但不算在用 |
+| 支付窗口 | `labops.payment.window`（默认 10 分钟），远短于审批时限，因为它是真的把时段扣住了 |
 | 审批 | 已过审批截止时间或预约已结束时返回 409；已有重叠 `APPROVED` 时也返回 409；并发审批最多一条成功 |
 | 其它 | 开始时间必须在未来；单次最长 12 小时；最多提前 30 天 |
 
@@ -94,7 +98,72 @@ production：`labops.reservation-expiry.mode=rabbit`。
 4. 空闲队列用 `x-expires` 自动删
 5. `ReservationExpiryCompensationJob` 始终扫库兜底
 
+**支付窗口复用同一套延时设施**，但用独立的队列命名空间 `labops.reservation.payment.delay.{id}.{deadlineMs}`，消息体带 `PAYMENT:` 前缀。审批截止时间仍然是裸数字，所以上一版留在 broker 里的消息升级后照样能解析。
+
+**截止时间会被主动撤销。** 以前预约一旦被审批或取消，那条延时任务照样挂到原定时刻——触发时状态守卫会挡住，无害，但队列（或本地 scheduler 的任务表）是按「历史上所有预约」增长而不是按「还开着的预约」增长的，加上支付窗口会让这个面直接翻倍。现在预约离开 `PENDING` / `AWAITING_PAYMENT` 时会发 disarm 事件，Rabbit 侧删掉私有队列，本地侧 cancel 掉 future。
+
+> `x-expires` 帮不上这个忙：它只回收**已经空掉**的队列，而待撤销的队列里正压着那条没投递的消息。
+
+撤销是尽力而为的清理，不是正确性手段——触发路径上的状态守卫仍然是让迟到截止时间无害的那道防线。
+
 本地默认 `expiry.mode=local`，不需要 broker。旧的共享 FIFO delay queue 启动时会清掉。真 broker 上的 HOL 验证见 `RabbitReservationExpiryOrderingIntegrationTest`（本机 `5672` 不通则跳过）。
+
+## 支付与对账
+
+钱这条链路全部在仓库内闭环，**不接任何真实支付渠道或沙箱**。`SimulatedPaymentChannel` 是一个同仓的假网关：自己记账、自己决定什么时候回调、能按天导出 T+1 账单文件。
+
+### 为什么模拟渠道要这样写
+
+真实集成里三件事是不受控的，这里都做成了参数，所以任何场景都能确定性重放：
+
+| 不确定性 | 这里的开关 |
+| --- | --- |
+| 回调时机 | `labops.payment.channel.callback-mode`：`IMMEDIATE` 同线程投递 / `MANUAL` 攒着等 `deliverPending()` / `DELAYED` 按 `callback-delay` 走调度器 |
+| 重复投递 | `redeliverAll()`——把已投递过的回调原样再发一遍 |
+| 投递丢失 | `discardPending()`——渠道账上留着这笔，本地永远收不到 |
+
+渠道流水号是单调序列不是随机数，也是为了可重放。`reset()` 会清账但**不回退序列号**：真实网关不会重发同一个交易号，回退会让新场景拿到本地流水已经存在的号，然后被幂等检查完全正确地、也非常费解地当成重放。
+
+### 幂等：两层
+
+```text
+回调进来 → 查 idempotency_key 有没有  ──有──→ 原样吞掉，什么都不动
+                    │无
+                    ↓
+              插入流水（唯一索引兜底）  ──违反──→ 整个事务回滚，PaymentCallbackIngest 在事务外面接住，回渠道「已记录」
+```
+
+查一次就够了吗？不够。**两条同一笔回调同时到达时，两边都会先读到「没见过」再各自写入**——`uk_payment_transaction_idempotency` 才是真正拦住第二条的东西。`PaymentCallbackIngest` 故意放在事务外：被标记 rollback-only 的事务在里面是劝不回来的。
+
+### 对账：比什么、比谁
+
+`ReconciliationService` 每天（默认 UTC 01:30）读前一天的渠道账单，和本地流水按订单号逐笔比。两个决定撑起整个类：
+
+- **比「本地流水实际记了多少」，不是「订单应收多少」。** 这两个数只在「没出错且没退款」时相等——也就是恰好在对账没事可做的时候。拿应收去比，每一笔正常的部分退款都会报警，而最该抓的那类（渠道成功、本地没落库）反而静悄悄：那时候应收和渠道正好一致，缺的是流水本身。
+- **比双方订单号的并集。** 只遍历本地看不见渠道独有的条目，只遍历账单看不见本地记了而渠道没结的钱。
+
+差异分四类：`MISSING_LOCALLY`、`MISSING_IN_CHANNEL`、`AMOUNT_MISMATCH`、`STATUS_MISMATCH`（金额对得上但本地订单状态还停在未结）。
+
+### 差账工单
+
+复用现有 `fault_work_orders` 表，加 `category` 区分。两个刻意的选择：
+
+- 差账工单**从不置 `equipment_taken_offline`**——账目对不平跟设备好不好用没关系，把设备推成维护会为了一个财务问题去取消一堆无辜预约。
+- `discrepancy_key`（账期 + 订单号 + 差异类型）带唯一索引。对账任务本来就该能重跑，重跑不该堆出第二张单。
+- 报修去重的那道 `ACTIVE_WORK_ORDER_EXISTS` 现在只看 `category = FAULT`，否则一张差账工单会挡住别人报「这机器坏了」。
+
+### 锁顺序
+
+回调路径按 **Equipment → Reservation → PaymentOrder** 加锁——把支付订单**追加**在现有顺序末尾，而不是先锁它。回调和取消预约是从系统两头去碰同样三行；这里先锁订单行就会把预约路径已经修掉的那个 ABBA 环重新引回来。
+
+### 接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/payments/callback` | 渠道回调。Spring Security 放行（网关没有平台账号），端点自己校 `X-Channel-Token`，代替真实集成里的验签 |
+| `POST` | `/api/payments/orders/{orderNo}/pay` | 模拟「用户在渠道 App 里付了」。平台自己不动钱，只是请渠道动，然后照常等回调 |
+| `GET` | `/api/payments/orders/{orderNo}` | 订单详情 |
+| `POST` | `/api/reconciliation/run?settlementDate=YYYY-MM-DD` | 管理员手动重跑对账 |
 
 ## 认证与安全默认
 
@@ -156,9 +225,19 @@ npm run build
 
 后端覆盖权限、JWT 查库与降权、登录限流、配额、重叠 PENDING 审批、锁顺序、过期与工单状态机。默认 `mvn test` 不需要 MySQL/Redis/Rabbit。
 
+三类差账场景各有一个测试，都是**先写红测试复现、再修**：
+
+| 场景 | 测试 | 修之前红在哪 |
+| --- | --- | --- |
+| 回调重复 | `PaymentCallbackIdempotencyIntegrationTest` | 同一条回调重发写出第二条流水、`paid_cents` 翻倍；并发重放下是 9 条 |
+| 部分退款 | `PartialRefundReconciliationIntegrationTest` | 拿订单应收比渠道净额，退一半就被判不平、误开差账工单 |
+| 渠道成功本地失败 | `ChannelSuccessLocalFailureReconciliationIntegrationTest` | 同一个比法反而算平——应收和渠道一致，缺的正是流水 |
+
+另外还有：支付窗口占时段与超时归还（`ReservationPaymentWindowIntegrationTest`）、截止时间不泄漏（`ReservationDeadlineLeakIntegrationTest` + `LocalReservationExpirySchedulerTest`）、报修下线设备时已支付预约照样退款（`FaultReportRefundsPaidReservationIntegrationTest`）。
+
 ## 面试时可以这样说
 
-> 这是实验室设备预约和报修系统。难点在并发预约、超时审批和多角色权限。创建时按用户再按设备加锁，数据库再加悲观写锁；待审批可以重叠，批准时才占时段，并发审批最多过一条。超时用每预约一条 Rabbit 延迟队列，非法消息直接丢弃，数据库扫描兜底。JWT 每次查库，登录按 IP 限流，默认只绑 127.0.0.1，公网不会带着体验账号启动。
+> 这是实验室设备预约和报修系统。难点在并发预约、超时审批、多角色权限，以及接上钱之后的幂等与对账。创建时按用户再按设备加锁，数据库再加悲观写锁；待审批可以重叠，批准时才占时段，并发审批最多过一条。超时用每预约一条 Rabbit 延迟队列，非法消息直接丢弃，数据库扫描兜底。JWT 每次查库，登录按 IP 限流，默认只绑 127.0.0.1，公网不会带着体验账号启动。付款走模拟渠道，回调幂等靠幂等键加唯一索引两层——只做应用层查重挡不住并发重投。对账刻意比的是本地流水而不是订单应收，因为「渠道成功、本地没落库」那种情况下应收和渠道恰好一致，用应收比会永远看不见它。
 
 ## 还可以做的
 

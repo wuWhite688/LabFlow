@@ -20,8 +20,16 @@ import com.arthur.labops.reservation.expiry.ReservationDeadlineEvent;
 import com.arthur.labops.reservation.expiry.ReservationDeadlineKind;
 
 /**
- * The single ingest point for channel callbacks, whether they arrive over HTTP or
- * straight from the in-process simulator.
+ * Applies one channel callback, exactly once.
+ *
+ * <p>Idempotency is two-layered. The lookup below absorbs the ordinary case — a
+ * gateway redelivering because it never saw an acknowledgement — without
+ * touching anything. The unique index on {@code idempotency_key} absorbs the
+ * case the lookup structurally cannot: two deliveries in flight at the same
+ * moment, both reading "not seen" before either writes. The loser's whole
+ * transaction rolls back, which is the correct outcome — it applied nothing —
+ * and {@link PaymentCallbackIngest} turns that into a quiet "already recorded"
+ * rather than an error the channel would retry forever.
  *
  * <p>Locks in the platform-wide order — Equipment &rarr; Reservation &rarr; PaymentOrder.
  * The payment order is appended to the existing Equipment &rarr; Reservation order
@@ -72,7 +80,13 @@ public class PaymentCallbackService {
                 .orElseThrow(() -> new BusinessException(
                         "PAYMENT_ORDER_NOT_FOUND", "支付订单不存在", HttpStatus.NOT_FOUND));
 
-        transactionRepository.save(new PaymentTransaction(
+        if (transactionRepository.findByIdempotencyKey(request.idempotencyKey()).isPresent()) {
+            log.info("Payment callback ignored as replay orderNo={} idempotencyKey={}",
+                    request.orderNo(), request.idempotencyKey());
+            return new PaymentCallbackResult(request.orderNo(), false, order.getStatus());
+        }
+
+        transactionRepository.saveAndFlush(new PaymentTransaction(
                 request.orderNo(),
                 request.idempotencyKey(),
                 request.type(),

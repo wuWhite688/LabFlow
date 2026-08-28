@@ -14,15 +14,15 @@ import com.arthur.labops.payment.channel.ChannelEntryType;
 @Component
 public class LocalPaymentCallbackSink implements ChannelCallbackSink {
 
-    private final PaymentCallbackService callbackService;
+    private final PaymentCallbackIngest callbackIngest;
 
-    public LocalPaymentCallbackSink(PaymentCallbackService callbackService) {
-        this.callbackService = callbackService;
+    public LocalPaymentCallbackSink(PaymentCallbackIngest callbackIngest) {
+        this.callbackIngest = callbackIngest;
     }
 
     @Override
     public void deliver(ChannelCallback callback) {
-        callbackService.handle(new PaymentCallbackRequest(
+        callbackIngest.ingest(new PaymentCallbackRequest(
                 callback.orderNo(),
                 callback.idempotencyKey(),
                 callback.type() == ChannelEntryType.REFUND

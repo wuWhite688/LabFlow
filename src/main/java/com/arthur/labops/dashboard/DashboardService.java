@@ -13,6 +13,7 @@ import com.arthur.labops.equipment.EquipmentStatus;
 import com.arthur.labops.reservation.ReservationRepository;
 import com.arthur.labops.reservation.ReservationStatus;
 import com.arthur.labops.user.PlatformUserRepository;
+import com.arthur.labops.user.SystemAccountInitializer;
 import com.arthur.labops.workorder.FaultWorkOrderRepository;
 import com.arthur.labops.workorder.WorkOrderPriority;
 import com.arthur.labops.workorder.WorkOrderStatus;
@@ -45,7 +46,9 @@ public class DashboardService {
                 WorkOrderStatus.SUBMITTED, WorkOrderStatus.ASSIGNED,
                 WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.RESOLVED);
         return new DashboardStatsResponse(
-                userRepository.count(),
+                // Excludes the platform's own account: it is a foreign-key target for
+                // records the platform raises for itself, not a user of the platform.
+                userRepository.countByUsernameNot(SystemAccountInitializer.SYSTEM_USERNAME),
                 equipmentRepository.count(),
                 equipmentRepository.countByStatus(EquipmentStatus.AVAILABLE),
                 equipmentRepository.countByStatus(EquipmentStatus.MAINTENANCE),

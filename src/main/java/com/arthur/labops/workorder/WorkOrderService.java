@@ -20,8 +20,11 @@ import com.arthur.labops.equipment.EquipmentStatus;
 import com.arthur.labops.equipment.EquipmentStatusService;
 import com.arthur.labops.audit.AuditLogService;
 import com.arthur.labops.reservation.Reservation;
+import com.arthur.labops.reservation.ReservationClosure;
+import com.arthur.labops.reservation.ReservationClosureService;
 import com.arthur.labops.reservation.ReservationRepository;
 import com.arthur.labops.reservation.ReservationStatus;
+import com.arthur.labops.reservation.ReservationStatuses;
 import com.arthur.labops.user.CurrentUserService;
 import com.arthur.labops.user.PlatformUser;
 import com.arthur.labops.user.PlatformUserRepository;
@@ -36,9 +39,12 @@ public class WorkOrderService {
             WorkOrderStatus.IN_PROGRESS,
             WorkOrderStatus.RESOLVED);
 
-    private static final Set<ReservationStatus> OPEN_RESERVATIONS = EnumSet.of(
-            ReservationStatus.PENDING,
-            ReservationStatus.APPROVED);
+    /**
+     * Every reservation a fault report has to deal with, money included. Taking
+     * equipment offline must not skip a paid reservation — that would leave the
+     * user without the equipment and without their money.
+     */
+    private static final Set<ReservationStatus> OPEN_RESERVATIONS = ReservationStatuses.OPEN;
 
     private static final Map<WorkOrderStatus, Set<WorkOrderStatus>> ALLOWED_TRANSITIONS = Map.of(
             WorkOrderStatus.SUBMITTED, EnumSet.of(WorkOrderStatus.ASSIGNED, WorkOrderStatus.CANCELLED),
@@ -55,6 +61,7 @@ public class WorkOrderService {
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final EquipmentStatusService equipmentStatusService;
+    private final ReservationClosureService closureService;
 
     public WorkOrderService(EquipmentRepository equipmentRepository,
                             FaultWorkOrderRepository workOrderRepository,
@@ -62,7 +69,8 @@ public class WorkOrderService {
                             PlatformUserRepository userRepository,
                             CurrentUserService currentUserService,
                             AuditLogService auditLogService,
-                            EquipmentStatusService equipmentStatusService) {
+                            EquipmentStatusService equipmentStatusService,
+                            ReservationClosureService closureService) {
         this.equipmentRepository = equipmentRepository;
         this.workOrderRepository = workOrderRepository;
         this.reservationRepository = reservationRepository;
@@ -70,6 +78,7 @@ public class WorkOrderService {
         this.currentUserService = currentUserService;
         this.auditLogService = auditLogService;
         this.equipmentStatusService = equipmentStatusService;
+        this.closureService = closureService;
     }
 
     @Transactional
@@ -321,10 +330,17 @@ public class WorkOrderService {
             if (onlyRequesterId != null && !onlyRequesterId.equals(reservation.getRequesterId())) {
                 continue;
             }
-            reservation.cancel();
+            // Same transition the owner's own cancel goes through, so a paid
+            // reservation refunds here too instead of being closed on the quiet.
+            ReservationClosure closure = closureService.close(reservation);
+            if (closure == ReservationClosure.NOT_CLOSEABLE) {
+                continue;
+            }
             cancelled += 1;
             auditLogService.record(actor, "RESERVATION_CANCELLED", "RESERVATION", reservation.getId(),
-                    "设备报修联动取消预约");
+                    closure == ReservationClosure.REFUND_PENDING
+                            ? "设备报修联动取消预约，退款处理中"
+                            : "设备报修联动取消预约");
         }
         return cancelled;
     }
