@@ -83,7 +83,8 @@ ReservationApplicationService.create
 | 占时段 | `APPROVED`、`AWAITING_PAYMENT`、`PAID` 占用设备日历；`REFUNDING` **不占**——用户已经取消了，不该让别人为渠道的退款延迟买单 |
 | 设备「使用中」 | 只有 `APPROVED` 和 `PAID` 会把设备推成 `IN_USE`；`AWAITING_PAYMENT` 占时段但不算在用 |
 | 支付窗口 | `min(now + labops.payment.window, startTime)`，默认 10 分钟。远短于审批时限，因为它是真的把时段扣住了；也**绝不越过预约开始时间**——两分钟后就开始的预约不该拿到十分钟支付窗口 |
-| 计价 | 按小时定价，**按开始的每一分钟**计费并向上取整到分。预约没有最短时长，所以截断会让 59 秒的预约算出 0 元、然后被当成免费设备直接放行 |
+| 计价 | 按小时定价，**按开始的每一分钟**计费并向上取整到分。预约没有最短时长，所以任何一处截断都会让足够短的预约算出 0 元、然后掉进"免费设备"路径——`toMinutes()` 会坑 59 秒，`toSeconds()` 会坑 500 毫秒，所以取整必须从秒以下开始做 |
+| 回调状态 | 只有 `status = SUCCESS` 才计入流水并折算到订单。其余状态记审计日志后返回 200（让渠道停止重投），**不当作钱**——字段既然收了就必须参与判断，否则一条 `FAILED` 的支付回调会把未付款的预约标成已付 |
 | 审批 | 已过审批截止时间或预约已结束时返回 409；已有重叠 `APPROVED` 时也返回 409；并发审批最多一条成功 |
 | 其它 | 开始时间必须在未来；单次最长 12 小时；最多提前 30 天 |
 
@@ -157,6 +158,23 @@ production：`labops.reservation-expiry.mode=rabbit`。
 > 键必须同时覆盖退款。只给支付加键、然后给退款加重试，等于把「重复扣款」换成「重复退款」。
 
 首次投递走线程池而不是在 `AFTER_COMMIT` 里同步跑，有两个原因：出站调用不该占着请求线程；以及 **`AFTER_COMMIT` 阶段线程上还绑着刚结束的 EntityManager**，在那里开新事务会复用它，等渠道同步回调进来写库时就炸 `no transaction is known to be in progress`。线程池线程是干净的。
+
+### 意图会过期
+
+可靠投递不等于正确投递。出站请求做了持久化重试之后，冒出一个反方向的问题：**预约都失效了，重试还坚持要去扣钱**。
+
+复现路径：第一次扣款出站失败 → 支付窗口过期，预约 `EXPIRED`、订单 `CLOSED` → 渠道恢复 → retry job 这时才把钱扣掉 → 回调发现订单已关 → `REFUND_DUE` → 再退回去。补偿机制确实能兜住，但**明知要立刻退还却还是去收，本身就不该做**。
+
+修法和预约延迟队列是同一课，两层：
+
+| 层 | 作用 |
+| --- | --- |
+| 关闭未支付订单时废掉 `:PAY` intent（`OBSOLETE`） | 清理，让 retry job 不再捞它 |
+| `attempt()` 发送前重新确认订单状态 | **真正的防线**——disarm 可能漏掉，触发点的守卫不会 |
+
+判据按类型分：**扣款**只在订单仍是 `AWAITING_PAYMENT` 时才成立；**退款**只要渠道那边还握着钱（`refundableCents > 0`）就成立。
+
+`OBSOLETE` 只能从"还没发出去"的状态进入。一旦渠道已经接受了请求，钱就在路上了，答案是退款而不是橡皮擦。
 
 ### 支付晚于窗口到账
 
@@ -247,6 +265,7 @@ JDK 解析顺序：`-JavaPath` → `JAVA_HOME` → `PATH`。`.\build.ps1` 必须
 
 - **账期切口硬编码 UTC 自然日。** 模拟渠道按 UTC 切账单，本地也按渠道给的 `occurredAt` 切，所以"23:59 扣款、00:01 回调"仍会落进正确账期。真接第三方后如果对方按北京时间、结算日或自定义 cut-off 切账，这个假设就要跟着改
 - `labops.payment.callback-token` 的开发默认值与既有 `labops.jwt.secret` 同性质，受同一道 `server.address=127.0.0.1` + `PublicBindSafety` 约束，线上必须覆盖
+- **测试默认关掉了两个后台扫描器**（`reservation-expiry.scan-interval`、`payment.outbound.retry-interval`）。每个属性不同的 `@SpringBootTest` 都是一个独立上下文，而它们共用同一个 H2 库，所以定时任务会一个上下文一份地扫别人的数据——后台补偿扫描能把另一个测试正在竞态的预约提前过期掉。需要的测试自己显式调用或自己改短
 - `STATUS_MISMATCH` 这类差异比其余三类窄：正常回调里流水落库和订单折算在同一个事务，所以"流水成功、订单状态没更新"很难留下。它是防御性的，不像前三类有红绿测试撑着
 
 ## 测试
@@ -275,6 +294,8 @@ npm run build
 | 重复发起支付 | `DuplicatePaymentInitiationIntegrationTest` | 渠道账上出现 2 笔真实扣款，而对账报"平账" |
 | 支付晚于窗口到账 | `LatePaymentAfterWindowIntegrationTest` | 预约 `EXPIRED`、订单 `PAID`、钱被收走，对账同样报"平账" |
 | 退款请求发不出去 | `RefundRequestRecoveryIntegrationTest` | 预约永久卡在 `REFUNDING`，20 秒轮询也出不来 |
+
+第三轮 review 打出一个新 blocker：**意图会过期**（见上）。同轮还收掉三条——`<1s` 预约仍免费、回调 `status` 是死字段、并发双击支付里落败的那个会拿到 409（唯一索引兜住了钱，但不该让调用方看见错误）。
 
 另外还有：支付窗口占时段与超时归还（`ReservationPaymentWindowIntegrationTest`）、截止时间不泄漏（`ReservationDeadlineLeakIntegrationTest` + `LocalReservationExpirySchedulerTest`）、报修下线设备时已支付预约照样退款（`FaultReportRefundsPaidReservationIntegrationTest`）、以及计费取整／窗口夹紧／付款权限／字段长度校验四道护栏（`PaymentGuardrailsIntegrationTest`，逐条用探针回退证明过不是恒真）。
 

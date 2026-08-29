@@ -63,6 +63,10 @@ public class PaymentService implements ReservationPaymentGateway {
             return;
         }
         order.close();
+        // The order will never be paid, so the intent to charge for it is spent.
+        // Left standing, the retry job would keep offering it to the channel long
+        // after the reservation was given back.
+        dispatchService.abandonIntent(PaymentIdempotency.payment(order.getOrderNo()));
         log.info("Payment order closed unpaid orderNo={} reservationId={}", order.getOrderNo(), reservationId);
     }
 

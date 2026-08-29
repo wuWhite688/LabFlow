@@ -27,6 +27,14 @@ public class PaymentRequestStateService {
         requestRepository.findByIdempotencyKey(idempotencyKey).ifPresent(PaymentRequest::markSent);
     }
 
+    /** @return true when the intent was still pending and has now been dropped */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean markObsolete(String idempotencyKey) {
+        return requestRepository.findByIdempotencyKey(idempotencyKey)
+                .map(PaymentRequest::markObsolete)
+                .orElse(false);
+    }
+
     /** @return the request if this failure exhausted its retry budget, otherwise null */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public PaymentRequest markFailed(String idempotencyKey, String error) {

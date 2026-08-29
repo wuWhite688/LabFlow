@@ -21,4 +21,11 @@ public record PaymentCallbackRequest(
         @NotBlank @Size(max = 80) String channelTxnId,
         @NotBlank @Size(max = 30) String status,
         @NotNull Instant occurredAt) {
+
+    /** The only channel outcome that means money actually moved. */
+    public static final String STATUS_SUCCESS = "SUCCESS";
+
+    public boolean succeeded() {
+        return STATUS_SUCCESS.equalsIgnoreCase(status);
+    }
 }

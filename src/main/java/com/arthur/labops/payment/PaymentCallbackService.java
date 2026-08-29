@@ -83,6 +83,20 @@ public class PaymentCallbackService {
                 .orElseThrow(() -> new BusinessException(
                         "PAYMENT_ORDER_NOT_FOUND", "支付订单不存在", HttpStatus.NOT_FOUND));
 
+        if (!request.succeeded()) {
+            // The channel is reporting an outcome, not just an event. A failed
+            // attempt moved no money, so it has no place in a ledger whose whole
+            // meaning is "money that moved" — and folding it onto the order would
+            // mark an unpaid reservation as paid. Recorded in the audit trail and
+            // acknowledged, so the channel stops retrying it.
+            auditLogService.recordSystem("PAYMENT_CALLBACK_UNSUCCESSFUL", "RESERVATION",
+                    unlocked.getReservationId(),
+                    "渠道回调状态为 " + request.status() + "，订单号 " + request.orderNo() + "，不计入流水");
+            log.info("Payment callback ignored, channel status={} orderNo={}",
+                    request.status(), request.orderNo());
+            return new PaymentCallbackResult(request.orderNo(), false, unlocked.getStatus());
+        }
+
         if (transactionRepository.findByIdempotencyKey(request.idempotencyKey()).isPresent()) {
             log.info("Payment callback ignored as replay orderNo={} idempotencyKey={}",
                     request.orderNo(), request.idempotencyKey());

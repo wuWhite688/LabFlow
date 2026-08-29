@@ -28,18 +28,40 @@ public class PaymentDispatchService {
     private static final Logger log = LoggerFactory.getLogger(PaymentDispatchService.class);
 
     private final PaymentRequestRepository requestRepository;
+    private final PaymentOrderRepository orderRepository;
     private final PaymentRequestStateService stateService;
     private final SimulatedPaymentChannel channel;
     private final ApplicationEventPublisher eventPublisher;
 
     public PaymentDispatchService(PaymentRequestRepository requestRepository,
+                                  PaymentOrderRepository orderRepository,
                                   PaymentRequestStateService stateService,
                                   SimulatedPaymentChannel channel,
                                   ApplicationEventPublisher eventPublisher) {
         this.requestRepository = requestRepository;
+        this.orderRepository = orderRepository;
         this.stateService = stateService;
         this.channel = channel;
         this.eventPublisher = eventPublisher;
+    }
+
+    /**
+     * Drops an intent that no longer applies, so the retry job stops offering it.
+     *
+     * <p>Cleanup, not the safety mechanism. {@link #stillApplies} on the sending
+     * path is what actually makes a stale attempt harmless — exactly the split
+     * the reservation deadlines use, and for the same reason: a disarm can be
+     * missed, a guard at the point of firing cannot.
+     */
+    @Transactional
+    public void abandonIntent(String idempotencyKey) {
+        // Joins the caller's transaction rather than taking its own. Closing an
+        // order and dropping its intent are one decision: if the close rolls back,
+        // an intent abandoned in a separate transaction would survive it and the
+        // user could never pay.
+        requestRepository.findByIdempotencyKey(idempotencyKey)
+                .filter(PaymentRequest::markObsolete)
+                .ifPresent(request -> log.info("Outbound payment intent abandoned key={}", idempotencyKey));
     }
 
     /**
@@ -48,6 +70,27 @@ public class PaymentDispatchService {
      *
      * @return true when this call created the request
      */
+    @Transactional(readOnly = true)
+    public boolean hasIntent(String idempotencyKey) {
+        return requestRepository.findByIdempotencyKey(idempotencyKey).isPresent();
+    }
+
+    /**
+     * Is this intent still worth sending? Read fresh, because the answer changes
+     * between the attempt that failed and the attempt that retries.
+     */
+    private boolean stillApplies(PaymentRequest request) {
+        PaymentOrder order = orderRepository.findByOrderNo(request.getOrderNo()).orElse(null);
+        if (order == null) {
+            return false;
+        }
+        return request.getType() == PaymentTransactionType.REFUND
+                // Refunding is owed while the channel still holds money for us.
+                ? order.refundableCents() > 0
+                // Charging is owed only while the order is still waiting to be paid.
+                : order.getStatus() == PaymentOrderStatus.AWAITING_PAYMENT;
+    }
+
     @Transactional
     public boolean enqueue(String orderNo, PaymentTransactionType type, long amountCents, String idempotencyKey) {
         if (requestRepository.findByIdempotencyKey(idempotencyKey).isPresent()) {
@@ -73,6 +116,17 @@ public class PaymentDispatchService {
     public PaymentRequest attempt(String idempotencyKey) {
         PaymentRequest request = requestRepository.findByIdempotencyKey(idempotencyKey).orElse(null);
         if (request == null || request.isSettled()) {
+            return null;
+        }
+        if (!stillApplies(request)) {
+            // Reliable delivery is not the same as correct delivery. Retrying a
+            // payment for a reservation that has since expired charges for a slot
+            // the platform has already handed to somebody else; the compensating
+            // refund would make that recoverable, but taking money we already know
+            // we must return is not something to do on purpose.
+            log.info("Outbound payment request no longer applies key={} type={} orderNo={}",
+                    idempotencyKey, request.getType(), request.getOrderNo());
+            stateService.markObsolete(idempotencyKey);
             return null;
         }
         try {

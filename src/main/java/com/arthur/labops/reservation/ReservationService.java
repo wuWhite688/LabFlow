@@ -206,19 +206,24 @@ public class ReservationService {
      * Price is per hour, charged per <em>started</em> minute and rounded up to the
      * cent so the platform never under-bills by a rounding error.
      *
-     * <p>Both roundings are up, and both matter. {@code Duration.toMinutes()}
-     * truncates, so billing straight off it charges 1 minute for 1m59s — and
-     * charges <em>nothing</em> for anything under a minute, which then falls
-     * through the {@code amount <= 0} branch and is silently treated as free
-     * equipment. Reservations have no minimum length, so that was reachable.
+     * <p>Every rounding is up, and every one of them matters. Both
+     * {@code Duration.toMinutes()} and {@code toSeconds()} truncate, so rounding
+     * at either boundary charges nothing for a short enough reservation — which
+     * then falls through the {@code amount <= 0} branch and is silently treated
+     * as free equipment. Reservations have no minimum length, so both were
+     * reachable from the public API.
      */
     private long amountCentsFor(Reservation reservation, Equipment equipment) {
         long hourlyPriceCents = equipment.getHourlyPriceCents();
         if (hourlyPriceCents <= 0) {
             return 0L;
         }
-        long seconds = Duration.between(reservation.getStartTime(), reservation.getEndTime()).toSeconds();
-        long startedMinutes = Math.ceilDiv(seconds, 60L);
+        Duration duration = Duration.between(reservation.getStartTime(), reservation.getEndTime());
+        // Round up below the second first. toSeconds() truncates just like
+        // toMinutes() did, so rounding only at the minute boundary still prices a
+        // 500ms reservation at zero and drops it back into the free path.
+        long startedSeconds = duration.getNano() > 0 ? duration.getSeconds() + 1 : duration.getSeconds();
+        long startedMinutes = Math.ceilDiv(startedSeconds, 60L);
         // Bounded by the max-duration rule and the price ceiling on Equipment, so
         // this cannot overflow in practice — exact rather than wrapping if it ever does.
         return Math.ceilDiv(Math.multiplyExact(hourlyPriceCents, startedMinutes), 60L);

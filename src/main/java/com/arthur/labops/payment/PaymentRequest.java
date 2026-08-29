@@ -91,8 +91,25 @@ public class PaymentRequest {
     public String getLastError() { return lastError; }
     public Instant getNextAttemptAt() { return nextAttemptAt; }
 
+    /** Nothing further will be sent for this request, whatever the reason. */
     public boolean isSettled() {
-        return status == PaymentRequestStatus.SENT || status == PaymentRequestStatus.ABANDONED;
+        return status == PaymentRequestStatus.SENT
+                || status == PaymentRequestStatus.ABANDONED
+                || status == PaymentRequestStatus.OBSOLETE;
+    }
+
+    /**
+     * The intent no longer applies. Only reachable from a state where nothing has
+     * been sent yet — once the channel has accepted a request, the money is in
+     * flight and the answer is a refund, not an eraser.
+     */
+    public boolean markObsolete() {
+        if (isSettled()) {
+            return false;
+        }
+        this.status = PaymentRequestStatus.OBSOLETE;
+        this.updatedAt = Instant.now();
+        return true;
     }
 
     public void markSent() {
