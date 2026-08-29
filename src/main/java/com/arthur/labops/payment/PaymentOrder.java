@@ -95,9 +95,36 @@ public class PaymentOrder {
         return paidCents - refundedCents;
     }
 
+    /** What is still owed before this order is settled. */
+    public long outstandingCents() {
+        return amountCents - paidCents;
+    }
+
+    /**
+     * The platform sells one thing per order and takes one payment for it. Partial
+     * and split payments are deliberately out of scope, so the only coherent
+     * amount is the one still outstanding — anything else is money the platform
+     * cannot attribute, and attributing it anyway is how a single cent settles a
+     * 6000-cent booking.
+     */
+    public boolean acceptsPayment(long cents) {
+        return cents == outstandingCents();
+    }
+
+    /** A refund can never exceed what the channel is still holding for us. */
+    public boolean acceptsRefund(long cents) {
+        return cents > 0 && cents <= refundableCents();
+    }
+
     public void applyPayment(long cents) {
+        if (!acceptsPayment(cents)) {
+            // The caller is expected to have asked first and answered the channel
+            // without applying anything. Reaching here is a bug, not bad input.
+            throw new IllegalArgumentException(
+                    "支付金额 " + cents + " 分与订单待付金额 " + outstandingCents() + " 分不符");
+        }
         this.paidCents += cents;
-        this.status = PaymentOrderStatus.PAID;
+        this.status = paidCents >= amountCents ? PaymentOrderStatus.PAID : PaymentOrderStatus.AWAITING_PAYMENT;
         this.updatedAt = Instant.now();
     }
 
@@ -115,6 +142,10 @@ public class PaymentOrder {
     }
 
     public void applyRefund(long cents) {
+        if (!acceptsRefund(cents)) {
+            throw new IllegalArgumentException(
+                    "退款金额 " + cents + " 分超过可退金额 " + refundableCents() + " 分");
+        }
         this.refundedCents += cents;
         this.status = this.refundedCents >= this.paidCents
                 ? PaymentOrderStatus.REFUNDED

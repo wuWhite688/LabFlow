@@ -103,6 +103,21 @@ public class PaymentDiscrepancyTicketService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean raiseOutboundFailureTicket(com.arthur.labops.payment.PaymentRequest request) {
+        return raiseOutboundHaltedTicket(request, request.getType() + " 请求重试 " + request.getAttempts()
+                + " 次仍未被渠道接受，最后错误：" + request.getLastError());
+    }
+
+    /**
+     * An outbound request that has stopped for a reason no retry can resolve.
+     *
+     * <p>Retries running out is one such reason; the amount on the request no
+     * longer matching what the order owes is another, and a worse one — the
+     * platform is not entitled to guess whether an operator's out-of-band refund
+     * was meant to replace the one it queued. Both share the request's own key, so
+     * an intent that stalls twice still produces one ticket.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean raiseOutboundHaltedTicket(com.arthur.labops.payment.PaymentRequest request, String reason) {
         String key = "outbound|" + request.getIdempotencyKey();
         if (workOrderRepository.existsByDiscrepancyKey(key)) {
             return false;
@@ -123,8 +138,7 @@ public class PaymentDiscrepancyTicketService {
                 systemReporter.getId(),
                 key,
                 "[对账差异] 出站请求失败 " + request.getOrderNo(),
-                request.getType() + " 请求重试 " + request.getAttempts() + " 次仍未被渠道接受，金额 "
-                        + request.getAmountCents() + " 分，最后错误：" + request.getLastError(),
+                request.getType() + " 请求金额 " + request.getAmountCents() + " 分未能完成：" + reason,
                 WorkOrderPriority.HIGH);
         workOrderRepository.saveAndFlush(ticket);
         auditLogService.recordSystem("PAYMENT_DISPATCH_ABANDONED", "WORK_ORDER", ticket.getId(),

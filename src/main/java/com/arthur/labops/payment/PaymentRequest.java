@@ -55,6 +55,15 @@ public class PaymentRequest {
     @Column(nullable = false)
     private int attempts;
 
+    /**
+     * How many times the channel has given this intent a final rejection. Only
+     * this counter changes the key presented to the channel; a local send failure
+     * leaves it alone, because we do not know whether the channel received that
+     * attempt and must ask again under the same key.
+     */
+    @Column(name = "channel_attempt", nullable = false)
+    private int channelAttempt;
+
     @Column(name = "last_error", length = 500)
     private String lastError;
 
@@ -88,6 +97,17 @@ public class PaymentRequest {
     public long getAmountCents() { return amountCents; }
     public PaymentRequestStatus getStatus() { return status; }
     public int getAttempts() { return attempts; }
+    public int getChannelAttempt() { return channelAttempt; }
+
+    /**
+     * What the channel is asked to deduplicate on. Distinct from the intent key:
+     * the intent is still "the cancellation refund for order X" however many
+     * attempts it takes, but an attempt the channel has already refused cannot be
+     * revived by asking for it again under the name it refused.
+     */
+    public String channelKey() {
+        return channelAttempt == 0 ? idempotencyKey : idempotencyKey + "#" + channelAttempt;
+    }
     public String getLastError() { return lastError; }
     public Instant getNextAttemptAt() { return nextAttemptAt; }
 
@@ -109,6 +129,32 @@ public class PaymentRequest {
         }
         this.status = PaymentRequestStatus.OBSOLETE;
         this.updatedAt = Instant.now();
+        return true;
+    }
+
+    /**
+     * The channel accepted this request and then reported that it failed. That is
+     * a final answer about the attempt, not about the intent — the money did not
+     * move, so the intent is still owed and has to go out again under a name the
+     * channel has not already closed.
+     *
+     * @return true when it is queued for another attempt, false when the retry
+     *         budget is spent and a human is needed instead
+     */
+    public boolean reopenAfterChannelRejection(String reason) {
+        if (status != PaymentRequestStatus.SENT) {
+            return false;
+        }
+        this.channelAttempt += 1;
+        this.attempts += 1;
+        this.lastError = reason == null ? null : reason.substring(0, Math.min(reason.length(), 500));
+        this.updatedAt = Instant.now();
+        if (attempts >= MAX_ATTEMPTS) {
+            this.status = PaymentRequestStatus.ABANDONED;
+            return false;
+        }
+        this.status = PaymentRequestStatus.FAILED;
+        this.nextAttemptAt = Instant.now();
         return true;
     }
 

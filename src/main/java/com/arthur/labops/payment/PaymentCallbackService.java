@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.arthur.labops.audit.AuditLogService;
+import com.arthur.labops.payment.reconcile.PaymentDiscrepancyTicketService;
 import com.arthur.labops.common.BusinessException;
 import com.arthur.labops.equipment.EquipmentRepository;
 import com.arthur.labops.equipment.EquipmentStatusService;
@@ -50,6 +51,8 @@ public class PaymentCallbackService {
     private final AuditLogService auditLogService;
     private final ApplicationEventPublisher eventPublisher;
     private final PaymentDispatchService dispatchService;
+    private final PaymentRequestRepository requestRepository;
+    private final PaymentDiscrepancyTicketService ticketService;
 
     public PaymentCallbackService(PaymentOrderRepository orderRepository,
                                   PaymentTransactionRepository transactionRepository,
@@ -58,7 +61,9 @@ public class PaymentCallbackService {
                                   EquipmentStatusService equipmentStatusService,
                                   AuditLogService auditLogService,
                                   ApplicationEventPublisher eventPublisher,
-                                  PaymentDispatchService dispatchService) {
+                                  PaymentDispatchService dispatchService,
+                                  PaymentRequestRepository requestRepository,
+                                  PaymentDiscrepancyTicketService ticketService) {
         this.orderRepository = orderRepository;
         this.transactionRepository = transactionRepository;
         this.reservationRepository = reservationRepository;
@@ -67,6 +72,8 @@ public class PaymentCallbackService {
         this.auditLogService = auditLogService;
         this.eventPublisher = eventPublisher;
         this.dispatchService = dispatchService;
+        this.requestRepository = requestRepository;
+        this.ticketService = ticketService;
     }
 
     @Transactional
@@ -94,12 +101,30 @@ public class PaymentCallbackService {
                     "渠道回调状态为 " + request.status() + "，订单号 " + request.orderNo() + "，不计入流水");
             log.info("Payment callback ignored, channel status={} orderNo={}",
                     request.status(), request.orderNo());
+            reopenRejectedRequest(request);
             return new PaymentCallbackResult(request.orderNo(), false, unlocked.getStatus());
         }
 
         if (transactionRepository.findByIdempotencyKey(request.idempotencyKey()).isPresent()) {
             log.info("Payment callback ignored as replay orderNo={} idempotencyKey={}",
                     request.orderNo(), request.idempotencyKey());
+            return new PaymentCallbackResult(request.orderNo(), false, order.getStatus());
+        }
+
+        if (!amountIsCoherent(request, order)) {
+            // The channel moved money the platform cannot attribute to this order.
+            // Booking it anyway is how one cent settles a 6000-cent reservation, and
+            // how a refund grows past the payment it is refunding. So it stays off
+            // the books deliberately — which is the one case where the two ledgers
+            // are *supposed* to disagree, and reconciliation raises the ticket
+            // precisely because the channel has a transaction we do not.
+            auditLogService.recordSystem("PAYMENT_CALLBACK_AMOUNT_REJECTED", "RESERVATION",
+                    order.getReservationId(),
+                    "渠道回调金额 " + request.amountCents() + " 分与订单不符（" + request.type()
+                            + "，订单号 " + request.orderNo() + "，待付 " + order.outstandingCents()
+                            + " 分，可退 " + order.refundableCents() + " 分），不计入流水");
+            log.warn("Payment callback rejected on amount orderNo={} type={} amountCents={}",
+                    request.orderNo(), request.type(), request.amountCents());
             return new PaymentCallbackResult(request.orderNo(), false, order.getStatus());
         }
 
@@ -118,6 +143,61 @@ public class PaymentCallbackService {
         log.info("Payment callback recorded orderNo={} type={} amountCents={} orderStatus={}",
                 request.orderNo(), request.type(), request.amountCents(), order.getStatus());
         return new PaymentCallbackResult(request.orderNo(), true, order.getStatus());
+    }
+
+    /**
+     * Does this amount mean anything against this order?
+     *
+     * <p>The platform sells one thing per order and takes one payment for it, so
+     * the only coherent payment is the whole outstanding amount, and no refund can
+     * exceed what the channel is still holding. The exception is money that
+     * arrives after the window closed: it is refunded in full whatever it is, so
+     * no amount there can leave the books wrong.
+     */
+    private boolean amountIsCoherent(PaymentCallbackRequest request, PaymentOrder order) {
+        if (request.type() == PaymentTransactionType.REFUND) {
+            return order.acceptsRefund(request.amountCents());
+        }
+        if (order.getStatus() == PaymentOrderStatus.CLOSED) {
+            return true;
+        }
+        return order.acceptsPayment(request.amountCents());
+    }
+
+    /**
+     * The channel accepted a request and has now reported that it failed.
+     *
+     * <p>Not recording it as money is only half the answer. The outbound request
+     * was marked SENT when the channel took it, and SENT counts as settled, so
+     * without this the refund is never sent again — the reservation stays in
+     * REFUNDING for good while both ledgers hold only the original payment and
+     * therefore agree with each other.
+     *
+     * <p>The next attempt goes out under a fresh channel key. The intent key stays
+     * put, because it is what stops a retry from becoming a second payment; but
+     * the channel has given a final answer about the attempt presented under the
+     * old one, and asking again with it would be a no-op at any gateway that
+     * honours idempotency.
+     */
+    private void reopenRejectedRequest(PaymentCallbackRequest request) {
+        PaymentRequest outbound = requestRepository
+                .findFirstByOrderNoAndTypeAndStatusOrderByIdDesc(
+                        request.orderNo(), request.type(), PaymentRequestStatus.SENT)
+                .orElse(null);
+        if (outbound == null) {
+            // Nothing of ours was in flight — a payment the user made in the
+            // channel's own app, for instance. There is no intent to reopen.
+            return;
+        }
+        String reason = "渠道回调状态 " + request.status() + "，交易号 " + request.channelTxnId();
+        if (outbound.reopenAfterChannelRejection(reason)) {
+            log.info("Outbound payment request reopened after channel rejection key={} channelAttempt={}",
+                    outbound.getIdempotencyKey(), outbound.getChannelAttempt());
+            eventPublisher.publishEvent(new PaymentRequestQueuedEvent(outbound.getIdempotencyKey()));
+        } else {
+            // Out of attempts with real money still owed. Nothing automated is left.
+            ticketService.raiseOutboundHaltedTicket(outbound, reason + "，重试预算已用尽");
+        }
     }
 
     private void applyToLedgerAndReservation(PaymentCallbackRequest request,

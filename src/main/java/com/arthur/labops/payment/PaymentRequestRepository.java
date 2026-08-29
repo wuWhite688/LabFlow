@@ -15,6 +15,16 @@ public interface PaymentRequestRepository extends JpaRepository<PaymentRequest, 
     List<PaymentRequest> findByOrderNoOrderByIdAsc(String orderNo);
 
     /**
+     * The one live outbound request of this kind for an order, used to correlate a
+     * channel's rejection back to the intent it was rejecting. Correlating on
+     * order and type rather than on the callback's key is deliberate: the key the
+     * channel echoes is the key of the attempt, and the whole point of reopening
+     * is that the next attempt needs a different one.
+     */
+    Optional<PaymentRequest> findFirstByOrderNoAndTypeAndStatusOrderByIdDesc(
+            String orderNo, PaymentTransactionType type, PaymentRequestStatus status);
+
+    /**
      * Requests still owed to the channel and due for another attempt. ABANDONED is
      * excluded — those already have a ticket and a human.
      */
