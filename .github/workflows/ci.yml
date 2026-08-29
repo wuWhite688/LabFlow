@@ -97,10 +97,7 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
-      # 这一步同时守着一个真实踩过的坑：vite.config.ts 依赖
-      # frontend/build/sites-vite-plugin.ts，而 .gitignore 一度把整个
-      # build/ 排除掉，导致本机因残留文件能构建、新 clone 必然失败。
-      # CI 每次都是全新 checkout，这类"只有我这台机器能跑"的问题会当场暴露。
+      # npm test 会先 vinext build 再跑单测，覆盖生产构建与 SSR 壳层。
       - name: 测试（含生产构建）
         working-directory: frontend
         run: npm test
