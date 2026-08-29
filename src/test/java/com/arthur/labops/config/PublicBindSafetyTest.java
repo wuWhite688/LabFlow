@@ -63,6 +63,21 @@ class PublicBindSafetyTest {
     }
 
     @Test
+    void nonLoopbackWithDemoCallbackTokenIsRejected() {
+        assertThatThrownBy(() -> PublicBindSafety.assertSafeToBind(
+                        "0.0.0.0", false, false, STRONG_SECRET, "labflow-simulated-channel"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("placeholder");
+    }
+
+    @Test
+    void nonLoopbackWithStrongCallbackTokenIsAllowed() {
+        assertThatCode(() -> PublicBindSafety.assertSafeToBind(
+                        "0.0.0.0", false, false, STRONG_SECRET, "labflow-callback-" + "a".repeat(24)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void packagedLocalPropertiesStillBindLoopback() throws Exception {
         Properties properties = new Properties();
         try (var in = Files.newInputStream(Path.of("src/main/resources/application.properties"))) {
@@ -89,5 +104,7 @@ class PublicBindSafetyTest {
         assertThat(properties.getProperty("labops.demo-users.enabled")).isEqualTo("${LABOPS_DEMO_USERS:false}");
         assertThat(properties.getProperty("labops.demo-data.enabled")).isEqualTo("${LABOPS_DEMO_DATA:false}");
         assertThat(properties.getProperty("labops.jwt.secret")).isEqualTo("${JWT_SECRET}");
+        assertThat(properties.getProperty("labops.payment.callback-token"))
+                .isEqualTo("${PAYMENT_CALLBACK_TOKEN}");
     }
 }
