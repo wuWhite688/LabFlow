@@ -129,6 +129,16 @@ public class PaymentOrder {
     }
 
     /**
+     * A late callback is still "the charge for this order". Accepting any other
+     * amount would book (and auto-refund) a number we cannot attribute to the
+     * reservation we already released. Unpaid closed orders have {@code paidCents
+     * == 0}, so the only coherent figure is the original billed amount.
+     */
+    public boolean acceptsLatePayment(long cents) {
+        return cents == amountCents && paidCents == 0;
+    }
+
+    /**
      * Money that arrived after the order was already closed. It is real and has to
      * be on the books, but the order is not settled by it — the platform is
      * holding money for a reservation that no longer exists and owes it back.
@@ -136,6 +146,11 @@ public class PaymentOrder {
      * "reservation EXPIRED, order PAID, money kept" state.
      */
     public void applyLatePayment(long cents) {
+        if (!acceptsLatePayment(cents)) {
+            throw new IllegalArgumentException(
+                    "迟到支付金额 " + cents + " 分与已关闭订单金额 " + amountCents
+                            + " 分不符（已入账 " + paidCents + " 分）");
+        }
         this.paidCents += cents;
         this.status = PaymentOrderStatus.REFUND_DUE;
         this.updatedAt = Instant.now();

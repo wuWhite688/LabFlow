@@ -1,8 +1,12 @@
 package com.arthur.labops;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -10,12 +14,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.arthur.labops.payment.PaymentController;
 import com.arthur.labops.payment.PaymentOrder;
 import com.arthur.labops.payment.PaymentOrderRepository;
 import com.arthur.labops.payment.PaymentOrderStatus;
+import com.arthur.labops.payment.PaymentProperties;
+import com.arthur.labops.payment.PaymentRequestRepository;
 import com.arthur.labops.payment.PaymentService;
+import com.arthur.labops.payment.PaymentTransactionRepository;
 import com.arthur.labops.payment.channel.ChannelEntryType;
 import com.arthur.labops.payment.channel.SimulatedPaymentChannel;
 import com.arthur.labops.reservation.ReservationRepository;
@@ -58,6 +67,15 @@ class LatePaymentAfterWindowIntegrationTest {
 
     @Autowired
     private ReservationRepository reservationRepository;
+
+    @Autowired
+    private PaymentProperties paymentProperties;
+
+    @Autowired
+    private PaymentTransactionRepository transactionRepository;
+
+    @Autowired
+    private PaymentRequestRepository requestRepository;
 
     private PaymentScenario scenario;
 
@@ -116,6 +134,55 @@ class LatePaymentAfterWindowIntegrationTest {
         assertThat(settled.netCents())
                 .as("the user must end up holding their money")
                 .isZero();
+        assertThat(reservationRepository.findById(reservationId).orElseThrow().getStatus())
+                .isEqualTo(ReservationStatus.EXPIRED);
+    }
+
+    /**
+     * CLOSED used to short-circuit amount coherence, so a one-cent late callback
+     * was booked and immediately refunded. That is the same "one cent settles a
+     * 6000-cent booking" hole, just after the window.
+     */
+    @Test
+    void aLatePaymentForLessThanTheBilledAmountIsRejected() throws Exception {
+        Long equipmentId = scenario.createPricedEquipment("PAY-LATE-UNDER", HOURLY_PRICE_CENTS);
+        Long reservationId = scenario.createReservation(equipmentId, 2);
+        scenario.approve(reservationId);
+        String orderNo = PaymentService.orderNoFor(reservationId);
+
+        scenario.payViaApi(orderNo, "student", "student123");
+        Await.until("the charge to reach the channel", () -> channel.ledger().stream()
+                .anyMatch(entry -> entry.orderNo().equals(orderNo)
+                        && entry.type() == ChannelEntryType.PAYMENT));
+        awaitReservation(reservationId, ReservationStatus.EXPIRED);
+        assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getStatus())
+                .isEqualTo(PaymentOrderStatus.CLOSED);
+
+        mockMvc.perform(post("/api/payments/callback")
+                        .header(PaymentController.CALLBACK_TOKEN_HEADER, paymentProperties.getCallbackToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "orderNo", orderNo,
+                                "idempotencyKey", "CH-LATE-UNDER-1",
+                                "type", "PAYMENT",
+                                "amountCents", 1L,
+                                "channelTxnId", "CH-LATE-UNDER-1",
+                                "status", "SUCCESS",
+                                "occurredAt", Instant.now().toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accepted").value(false));
+
+        PaymentOrder order = orderRepository.findByOrderNo(orderNo).orElseThrow();
+        assertThat(order.getPaidCents()).isZero();
+        assertThat(order.getStatus()).isEqualTo(PaymentOrderStatus.CLOSED);
+        assertThat(transactionRepository.countByOrderNo(orderNo)).isZero();
+        assertThat(requestRepository.findByOrderNoOrderByIdAsc(orderNo))
+                .filteredOn(request -> request.getType().name().equals("REFUND"))
+                .isEmpty();
+        assertThat(channel.ledger())
+                .filteredOn(entry -> entry.orderNo().equals(orderNo)
+                        && entry.type() == ChannelEntryType.REFUND)
+                .isEmpty();
         assertThat(reservationRepository.findById(reservationId).orElseThrow().getStatus())
                 .isEqualTo(ReservationStatus.EXPIRED);
     }

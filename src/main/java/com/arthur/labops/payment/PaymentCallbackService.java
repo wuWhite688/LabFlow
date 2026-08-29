@@ -122,7 +122,7 @@ public class PaymentCallbackService {
             return order.acceptsRefund(request.amountCents());
         }
         if (order.getStatus() == PaymentOrderStatus.CLOSED) {
-            return true;
+            return order.acceptsLatePayment(request.amountCents());
         }
         return order.acceptsPayment(request.amountCents());
     }

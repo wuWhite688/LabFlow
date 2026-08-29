@@ -58,12 +58,15 @@ function Assert-JarExistsAndFresh {
 
 $envFile = Join-Path $ProjectRoot ".env"
 if (-not (Test-Path -LiteralPath $envFile)) {
-    throw "Missing .env. Run: Copy-Item .env.example .env  then set a real JWT_SECRET (>=32 bytes)."
+    throw "Missing .env. Run: Copy-Item .env.example .env  then set a real JWT_SECRET (>=32 bytes) and PAYMENT_CALLBACK_TOKEN (>=16 bytes)."
 }
 . (Join-Path $PSScriptRoot "load-env.ps1") -EnvFile $envFile
 
 if (-not $env:JWT_SECRET -or [string]::IsNullOrWhiteSpace($env:JWT_SECRET)) {
     throw "JWT_SECRET is required in .env for production profile (min 32 bytes, non-placeholder)."
+}
+if (-not $env:PAYMENT_CALLBACK_TOKEN -or [string]::IsNullOrWhiteSpace($env:PAYMENT_CALLBACK_TOKEN)) {
+    throw "PAYMENT_CALLBACK_TOKEN is required in .env for production profile (min 16 bytes, non-placeholder)."
 }
 
 if ($ServerPort -le 0) {
