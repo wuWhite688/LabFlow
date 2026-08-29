@@ -42,6 +42,8 @@ public class SimulatedPaymentChannel {
     private final TaskScheduler taskScheduler;
 
     private final AtomicLong sequence = new AtomicLong();
+    private final java.util.concurrent.atomic.AtomicInteger failNextOutbound =
+            new java.util.concurrent.atomic.AtomicInteger();
     private final List<ChannelEntry> ledger = new ArrayList<>();
     private final Deque<ChannelCallback> pending = new ArrayDeque<>();
     private final List<ChannelCallback> delivered = new ArrayList<>();
@@ -62,9 +64,23 @@ public class SimulatedPaymentChannel {
         return record(orderNo, ChannelEntryType.REFUND, amountCents);
     }
 
+    /**
+     * Test seam: make the next {@code count} outbound calls fail, the way a real
+     * gateway does under a timeout or a 5xx. Belongs with {@link #discardPending()}
+     * and {@link #redeliverAll()} — the simulator's whole job is to make the
+     * failure modes of a real integration reproducible on demand.
+     */
+    public void failNextOutbound(int count) {
+        failNextOutbound.set(count);
+    }
+
     private ChannelEntry record(String orderNo, ChannelEntryType type, long amountCents) {
         if (amountCents <= 0) {
             throw new IllegalArgumentException("渠道交易金额必须为正数");
+        }
+        if (failNextOutbound.getAndUpdate(remaining -> Math.max(0, remaining - 1)) > 0) {
+            log.warn("Simulated channel rejecting outbound {} orderNo={} (injected failure)", type, orderNo);
+            throw new IllegalStateException("渠道暂时不可用（注入的故障）");
         }
         ChannelEntry entry;
         ChannelCallback callback;
@@ -187,5 +203,6 @@ public class SimulatedPaymentChannel {
         ledger.clear();
         pending.clear();
         delivered.clear();
+        failNextOutbound.set(0);
     }
 }

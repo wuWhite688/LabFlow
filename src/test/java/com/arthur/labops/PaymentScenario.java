@@ -84,6 +84,15 @@ final class PaymentScenario {
         return read(result);
     }
 
+    /** Calls the pay endpoint as the given user and returns the HTTP status. */
+    int payViaApi(String orderNo, String username, String password) throws Exception {
+        return mockMvc.perform(post("/api/payments/orders/" + orderNo + "/pay")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(mockMvc, objectMapper, username, password)))
+                .andReturn()
+                .getResponse()
+                .getStatus();
+    }
+
     private Map<String, Object> read(MvcResult result) throws Exception {
         return objectMapper.readValue(result.getResponse().getContentAsByteArray(), new TypeReference<>() {});
     }
