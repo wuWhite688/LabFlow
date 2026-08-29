@@ -8,5 +8,11 @@ public enum PaymentRequestStatus {
     /** The last attempt failed. Still eligible for retry. */
     FAILED,
     /** Retried past the limit. A discrepancy ticket has been raised for a human. */
-    ABANDONED
+    ABANDONED,
+    /**
+     * The intent no longer applies and must never be sent. An unpaid order that
+     * closed still owes nothing, and a retry that ignores that would charge for a
+     * reservation the platform has already given away.
+     */
+    OBSOLETE
 }

@@ -9,8 +9,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +31,8 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import com.arthur.labops.payment.PaymentController;
 import com.arthur.labops.payment.PaymentOrderRepository;
+import com.arthur.labops.payment.PaymentOrderStatus;
+import com.arthur.labops.payment.PaymentRequestRepository;
 import com.arthur.labops.payment.PaymentProperties;
 import com.arthur.labops.payment.PaymentService;
 import com.arthur.labops.payment.PaymentTransactionRepository;
@@ -68,6 +77,9 @@ class PaymentGuardrailsIntegrationTest {
 
     @Autowired
     private PaymentProperties paymentProperties;
+
+    @Autowired
+    private PaymentRequestRepository requestRepository;
 
     private PaymentScenario scenario;
 
@@ -209,6 +221,121 @@ class PaymentGuardrailsIntegrationTest {
                 .andExpect(jsonPath("$.code").value("PAYMENT_CALLBACK_UNAUTHORIZED"));
 
         assertThat(transactionRepository.countByOrderNo(orderNo)).isZero();
+    }
+
+    /**
+     * {@code Duration.toSeconds()} truncates too. A 500ms reservation is legal —
+     * there is no minimum length — and truncating to whole seconds prices it at
+     * zero, which is once again indistinguishable from free equipment. Rounding
+     * has to happen below the second, not at it.
+     */
+    @Test
+    void aSubSecondReservationOnPricedEquipmentIsStillCharged() throws Exception {
+        Long equipmentId = scenario.createPricedEquipment("BILL-MS", HOURLY_PRICE_CENTS);
+        Instant start = Instant.now().plus(1, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS);
+        Long reservationId = createReservation(equipmentId, start, start.plusMillis(500));
+
+        assertThat(scenario.approve(reservationId).get("status"))
+                .as("half a second is still a started minute, not free")
+                .isEqualTo("AWAITING_PAYMENT");
+        assertThat(orderRepository.findByOrderNo(PaymentService.orderNoFor(reservationId)).orElseThrow()
+                .getAmountCents())
+                .isEqualTo(HOURLY_PRICE_CENTS / 60);
+    }
+
+    /** 60.5 seconds is two started minutes; rounding at the second boundary would say one. */
+    @Test
+    void billingRoundsSubSecondRemaindersUpToo() throws Exception {
+        Long equipmentId = scenario.createPricedEquipment("BILL-FRAC", HOURLY_PRICE_CENTS);
+        Instant start = Instant.now().plus(1, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS);
+        Long reservationId = createReservation(equipmentId, start, start.plusMillis(60_500));
+        scenario.approve(reservationId);
+
+        assertThat(orderRepository.findByOrderNo(PaymentService.orderNoFor(reservationId)).orElseThrow()
+                .getAmountCents())
+                .isEqualTo(2 * (HOURLY_PRICE_CENTS / 60));
+    }
+
+    /**
+     * The channel reports outcomes, not just events. A callback that says the
+     * payment FAILED must not be folded onto the order as money received — the
+     * field is already carried through the request, so ignoring it means the
+     * ledger records a payment that never happened.
+     */
+    @Test
+    void aFailedPaymentCallbackIsNotTreatedAsMoneyReceived() throws Exception {
+        Long equipmentId = scenario.createPricedEquipment("CB-FAILED", HOURLY_PRICE_CENTS);
+        Long reservationId = scenario.createReservation(equipmentId, 1);
+        scenario.approve(reservationId);
+        String orderNo = PaymentService.orderNoFor(reservationId);
+
+        mockMvc.perform(post("/api/payments/callback")
+                        .header(PaymentController.CALLBACK_TOKEN_HEADER, paymentProperties.getCallbackToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "orderNo", orderNo,
+                                "idempotencyKey", "CH-FAIL-1",
+                                "type", "PAYMENT",
+                                "amountCents", HOURLY_PRICE_CENTS,
+                                "channelTxnId", "CH-FAIL-1",
+                                "status", "FAILED",
+                                "occurredAt", Instant.now().toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accepted").value(false));
+
+        assertThat(transactionRepository.countByOrderNo(orderNo))
+                .as("a failed attempt is not money and does not belong in the money ledger")
+                .isZero();
+        assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow())
+                .satisfies(order -> {
+                    assertThat(order.getPaidCents()).isZero();
+                    assertThat(order.getStatus()).isEqualTo(PaymentOrderStatus.AWAITING_PAYMENT);
+                });
+        assertThat(reservationRepository.findById(reservationId).orElseThrow().getStatus())
+                .isEqualTo(ReservationStatus.AWAITING_PAYMENT);
+    }
+
+    /**
+     * Two genuinely simultaneous taps, racing the pre-check rather than arriving
+     * one after the other. Neither caller did anything wrong, so neither should
+     * get an error: both are asking for the same intent, and it already exists.
+     */
+    @Test
+    void twoSimultaneousPayRequestsBothSucceedAndOweOnePayment() throws Exception {
+        Long equipmentId = scenario.createPricedEquipment("PAY-RACE2", HOURLY_PRICE_CENTS);
+        Long reservationId = scenario.createReservation(equipmentId, 1);
+        scenario.approve(reservationId);
+        String orderNo = PaymentService.orderNoFor(reservationId);
+
+        int threads = 6;
+        CyclicBarrier barrier = new CyclicBarrier(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        List<Future<Integer>> results = new ArrayList<>();
+        try {
+            for (int index = 0; index < threads; index++) {
+                results.add(pool.submit(() -> {
+                    barrier.await(20, TimeUnit.SECONDS);
+                    return scenario.payViaApi(orderNo, "student", "student123");
+                }));
+            }
+            for (Future<Integer> result : results) {
+                assertThat(result.get(30, TimeUnit.SECONDS))
+                        .as("a lost enqueue race is not the caller's problem")
+                        .isEqualTo(200);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(requestRepository.findByOrderNoOrderByIdAsc(orderNo))
+                .as("one intent, however many callers asked for it")
+                .hasSize(1);
+        Await.until("the charge to reach the channel", () -> channel.ledger().stream()
+                .anyMatch(entry -> entry.orderNo().equals(orderNo)));
+        Await.settle();
+        assertThat(channel.ledger())
+                .filteredOn(entry -> entry.orderNo().equals(orderNo))
+                .hasSize(1);
     }
 
     private Long createReservation(Long equipmentId, Instant start, Instant end) throws Exception {
