@@ -95,6 +95,43 @@ public class PaymentDiscrepancyTicketService {
         return true;
     }
 
+    /**
+     * A request the channel never accepted, past its retry budget. Real money is
+     * owed or unclaimed and no automated path is left, so it becomes a ticket
+     * keyed by the request's own idempotency key — one ticket per stuck intent,
+     * however many times the job retries afterwards.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean raiseOutboundFailureTicket(com.arthur.labops.payment.PaymentRequest request) {
+        String key = "outbound|" + request.getIdempotencyKey();
+        if (workOrderRepository.existsByDiscrepancyKey(key)) {
+            return false;
+        }
+        PaymentOrder order = orderRepository.findByOrderNo(request.getOrderNo()).orElse(null);
+        Equipment equipment = order == null
+                ? null
+                : equipmentRepository.findById(order.getEquipmentId()).orElse(null);
+        if (equipment == null) {
+            auditLogService.recordSystem("PAYMENT_DISPATCH_ABANDONED", "PAYMENT", null,
+                    "出站支付请求重试耗尽且无法定位设备：" + request.getIdempotencyKey());
+            return false;
+        }
+        PlatformUser systemReporter = userRepository.findByUsername(SystemAccountInitializer.SYSTEM_USERNAME)
+                .orElseThrow(() -> new IllegalStateException("系统账号缺失，无法创建对账差异工单"));
+        FaultWorkOrder ticket = FaultWorkOrder.discrepancy(
+                equipment,
+                systemReporter.getId(),
+                key,
+                "[对账差异] 出站请求失败 " + request.getOrderNo(),
+                request.getType() + " 请求重试 " + request.getAttempts() + " 次仍未被渠道接受，金额 "
+                        + request.getAmountCents() + " 分，最后错误：" + request.getLastError(),
+                WorkOrderPriority.HIGH);
+        workOrderRepository.saveAndFlush(ticket);
+        auditLogService.recordSystem("PAYMENT_DISPATCH_ABANDONED", "WORK_ORDER", ticket.getId(),
+                "出站支付请求重试耗尽：" + request.getIdempotencyKey());
+        return true;
+    }
+
     private WorkOrderPriority priorityFor(ReconciliationDiscrepancy discrepancy) {
         long magnitude = Math.abs(discrepancy.deltaCents());
         if (discrepancy.type() == DiscrepancyType.MISSING_LOCALLY || magnitude >= 10_000L) {

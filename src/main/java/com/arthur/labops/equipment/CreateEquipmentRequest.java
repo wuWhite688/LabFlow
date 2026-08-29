@@ -1,6 +1,7 @@
 package com.arthur.labops.equipment;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
@@ -17,7 +18,7 @@ public record CreateEquipmentRequest(
         LocalDate purchaseDate,
         @Size(max = 500) String description,
         /** Cents per hour. Omitted or zero means the equipment is free to reserve. */
-        @PositiveOrZero Long hourlyPriceCents
+        @PositiveOrZero @Max(Equipment.MAX_HOURLY_PRICE_CENTS) Long hourlyPriceCents
 ) {
     public CreateEquipmentRequest(String code, String name, String category, String location) {
         this(code, name, category, location, null, null, null, null, null, null);

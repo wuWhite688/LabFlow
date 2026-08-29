@@ -82,7 +82,8 @@ ReservationApplicationService.create
 | 配额 | 所有未关闭状态计入上限（默认 20）：`PENDING`、`APPROVED`、`AWAITING_PAYMENT`、`PAID`、`REFUNDING` |
 | 占时段 | `APPROVED`、`AWAITING_PAYMENT`、`PAID` 占用设备日历；`REFUNDING` **不占**——用户已经取消了，不该让别人为渠道的退款延迟买单 |
 | 设备「使用中」 | 只有 `APPROVED` 和 `PAID` 会把设备推成 `IN_USE`；`AWAITING_PAYMENT` 占时段但不算在用 |
-| 支付窗口 | `labops.payment.window`（默认 10 分钟），远短于审批时限，因为它是真的把时段扣住了 |
+| 支付窗口 | `min(now + labops.payment.window, startTime)`，默认 10 分钟。远短于审批时限，因为它是真的把时段扣住了；也**绝不越过预约开始时间**——两分钟后就开始的预约不该拿到十分钟支付窗口 |
+| 计价 | 按小时定价，**按开始的每一分钟**计费并向上取整到分。预约没有最短时长，所以截断会让 59 秒的预约算出 0 元、然后被当成免费设备直接放行 |
 | 审批 | 已过审批截止时间或预约已结束时返回 409；已有重叠 `APPROVED` 时也返回 409；并发审批最多一条成功 |
 | 其它 | 开始时间必须在未来；单次最长 12 小时；最多提前 30 天 |
 
@@ -134,6 +135,34 @@ production：`labops.reservation-expiry.mode=rabbit`。
 ```
 
 查一次就够了吗？不够。**两条同一笔回调同时到达时，两边都会先读到「没见过」再各自写入**——`uk_payment_transaction_idempotency` 才是真正拦住第二条的东西。`PaymentCallbackIngest` 故意放在事务外：被标记 rollback-only 的事务在里面是劝不回来的。
+
+### 出站：幂等键 + 持久化 + 补偿重试
+
+回调幂等只管**进来**的方向。出去的方向有两个独立的坑，而且都能把钱搞错到对账查不出来：
+
+**重复发起支付。** 从请求渠道扣款到回调回来之间，订单还是 `AWAITING_PAYMENT`，第二次点支付会通过同样的状态检查，造出**第二笔真实渠道交易**。两笔的交易号不同，所以回调幂等根本没机会匹配；更糟的是渠道收了两次、本地也记了两次，**对账会报"完全平账"**。
+
+**请求根本没发出去。** 取消已支付预约的事务已经提交、预约停在 `REFUNDING`，如果这时渠道调用失败而只是 log 一下，它就永远卡在那里。「对账会发现」在这里**不成立**：请求没到渠道，所以渠道没有退款、本地也没有退款流水，双方账目一致；换一天对账，这张订单甚至进不了订单号并集。
+
+两个坑是同一件事的两半，所以修法也是一件事——`payment_requests` 表：
+
+| 机制 | 作用 |
+| --- | --- |
+| 稳定幂等键（`LF…:PAY` / `:REF:CANCEL` / `:REF:LATE`） | 命名的是**意图**不是尝试，所以重试是重试，不是第二笔 |
+| `uk_payment_request_idempotency` 唯一索引 | 重复发起在**入队时**就被挡掉，还没碰到渠道 |
+| 渠道认商户幂等键 | 万一还是重复发了，渠道返回原交易而不是新建一笔 |
+| `PaymentRequestRetryJob` 定时补偿 + 指数退避 | 发不出去的请求会一直重试，而不是无声丢失 |
+| 重试耗尽 → 差账工单 | 真钱卡住时交给人，而不是又一行没人看的日志 |
+
+> 键必须同时覆盖退款。只给支付加键、然后给退款加重试，等于把「重复扣款」换成「重复退款」。
+
+首次投递走线程池而不是在 `AFTER_COMMIT` 里同步跑，有两个原因：出站调用不该占着请求线程；以及 **`AFTER_COMMIT` 阶段线程上还绑着刚结束的 EntityManager**，在那里开新事务会复用它，等渠道同步回调进来写库时就炸 `no transaction is known to be in progress`。线程池线程是干净的。
+
+### 支付晚于窗口到账
+
+窗口关掉预约、时段归还之后，钱才到。预约**保持关闭**（时段可能已经被别人拿走，复活它会双重占用），但这笔钱是真的：记流水、订单转 `REFUND_DUE`（收了但欠退），并发起一笔幂等的补偿退款。
+
+这一条也不能指望对账——渠道收了、本地记了，两边一致，账面完美而用户的钱没了。
 
 ### 对账：比什么、比谁
 
@@ -214,6 +243,12 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }  # 填入 JWT_SECRET�
 
 JDK 解析顺序：`-JavaPath` → `JAVA_HOME` → `PATH`。`.\build.ps1` 必须打出可运行 JAR；`start-production.ps1 -SkipBuild` 会拒绝过期 JAR。
 
+## 已知边界
+
+- **账期切口硬编码 UTC 自然日。** 模拟渠道按 UTC 切账单，本地也按渠道给的 `occurredAt` 切，所以"23:59 扣款、00:01 回调"仍会落进正确账期。真接第三方后如果对方按北京时间、结算日或自定义 cut-off 切账，这个假设就要跟着改
+- `labops.payment.callback-token` 的开发默认值与既有 `labops.jwt.secret` 同性质，受同一道 `server.address=127.0.0.1` + `PublicBindSafety` 约束，线上必须覆盖
+- `STATUS_MISMATCH` 这类差异比其余三类窄：正常回调里流水落库和订单折算在同一个事务，所以"流水成功、订单状态没更新"很难留下。它是防御性的，不像前三类有红绿测试撑着
+
 ## 测试
 
 ```powershell
@@ -233,11 +268,19 @@ npm run build
 | 部分退款 | `PartialRefundReconciliationIntegrationTest` | 拿订单应收比渠道净额，退一半就被判不平、误开差账工单 |
 | 渠道成功本地失败 | `ChannelSuccessLocalFailureReconciliationIntegrationTest` | 同一个比法反而算平——应收和渠道一致，缺的正是流水 |
 
-另外还有：支付窗口占时段与超时归还（`ReservationPaymentWindowIntegrationTest`）、截止时间不泄漏（`ReservationDeadlineLeakIntegrationTest` + `LocalReservationExpirySchedulerTest`）、报修下线设备时已支付预约照样退款（`FaultReportRefundsPaidReservationIntegrationTest`）。
+第二轮 review 又打出三个 blocker，同样是先红后修：
+
+| 场景 | 测试 | 修之前红在哪 |
+| --- | --- | --- |
+| 重复发起支付 | `DuplicatePaymentInitiationIntegrationTest` | 渠道账上出现 2 笔真实扣款，而对账报"平账" |
+| 支付晚于窗口到账 | `LatePaymentAfterWindowIntegrationTest` | 预约 `EXPIRED`、订单 `PAID`、钱被收走，对账同样报"平账" |
+| 退款请求发不出去 | `RefundRequestRecoveryIntegrationTest` | 预约永久卡在 `REFUNDING`，20 秒轮询也出不来 |
+
+另外还有：支付窗口占时段与超时归还（`ReservationPaymentWindowIntegrationTest`）、截止时间不泄漏（`ReservationDeadlineLeakIntegrationTest` + `LocalReservationExpirySchedulerTest`）、报修下线设备时已支付预约照样退款（`FaultReportRefundsPaidReservationIntegrationTest`）、以及计费取整／窗口夹紧／付款权限／字段长度校验四道护栏（`PaymentGuardrailsIntegrationTest`，逐条用探针回退证明过不是恒真）。
 
 ## 面试时可以这样说
 
-> 这是实验室设备预约和报修系统。难点在并发预约、超时审批、多角色权限，以及接上钱之后的幂等与对账。创建时按用户再按设备加锁，数据库再加悲观写锁；待审批可以重叠，批准时才占时段，并发审批最多过一条。超时用每预约一条 Rabbit 延迟队列，非法消息直接丢弃，数据库扫描兜底。JWT 每次查库，登录按 IP 限流，默认只绑 127.0.0.1，公网不会带着体验账号启动。付款走模拟渠道，回调幂等靠幂等键加唯一索引两层——只做应用层查重挡不住并发重投。对账刻意比的是本地流水而不是订单应收，因为「渠道成功、本地没落库」那种情况下应收和渠道恰好一致，用应收比会永远看不见它。
+> 这是实验室设备预约和报修系统。难点在并发预约、超时审批、多角色权限，以及接上钱之后的幂等与对账。创建时按用户再按设备加锁，数据库再加悲观写锁；待审批可以重叠，批准时才占时段，并发审批最多过一条。超时用每预约一条 Rabbit 延迟队列，非法消息直接丢弃，数据库扫描兜底。JWT 每次查库，登录按 IP 限流，默认只绑 127.0.0.1，公网不会带着体验账号启动。付款走模拟渠道。幂等要分进出两个方向：回调幂等靠幂等键加唯一索引两层，只做应用层查重挡不住并发重投；出站还要有稳定幂等键加持久化重试，否则重复点支付会造出两笔真实交易，而退款请求发失败会让预约永远卡在退款中。对账刻意比的是本地流水而不是订单应收，因为「渠道成功、本地没落库」那种情况下应收和渠道恰好一致，用应收比会永远看不见它。
 
 ## 还可以做的
 

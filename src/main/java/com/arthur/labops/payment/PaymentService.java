@@ -2,7 +2,6 @@ package com.arthur.labops.payment;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,12 +22,12 @@ public class PaymentService implements ReservationPaymentGateway {
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
 
     private final PaymentOrderRepository orderRepository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final PaymentDispatchService dispatchService;
 
     public PaymentService(PaymentOrderRepository orderRepository,
-                          ApplicationEventPublisher eventPublisher) {
+                          PaymentDispatchService dispatchService) {
         this.orderRepository = orderRepository;
-        this.eventPublisher = eventPublisher;
+        this.dispatchService = dispatchService;
     }
 
     /**
@@ -78,6 +77,14 @@ public class PaymentService implements ReservationPaymentGateway {
         if (refundable <= 0) {
             return;
         }
-        eventPublisher.publishEvent(new RefundRequestedEvent(order.getOrderNo(), refundable));
+        // Durable and keyed. The channel call happens after this transaction
+        // commits, and a failure there is retried rather than lost — a refund that
+        // never left the building is invisible to reconciliation, because neither
+        // side has it and both sides therefore agree.
+        dispatchService.enqueue(
+                order.getOrderNo(),
+                PaymentTransactionType.REFUND,
+                refundable,
+                PaymentIdempotency.cancellationRefund(order.getOrderNo()));
     }
 }

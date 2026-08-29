@@ -49,6 +49,7 @@ public class PaymentCallbackService {
     private final EquipmentStatusService equipmentStatusService;
     private final AuditLogService auditLogService;
     private final ApplicationEventPublisher eventPublisher;
+    private final PaymentDispatchService dispatchService;
 
     public PaymentCallbackService(PaymentOrderRepository orderRepository,
                                   PaymentTransactionRepository transactionRepository,
@@ -56,7 +57,8 @@ public class PaymentCallbackService {
                                   EquipmentRepository equipmentRepository,
                                   EquipmentStatusService equipmentStatusService,
                                   AuditLogService auditLogService,
-                                  ApplicationEventPublisher eventPublisher) {
+                                  ApplicationEventPublisher eventPublisher,
+                                  PaymentDispatchService dispatchService) {
         this.orderRepository = orderRepository;
         this.transactionRepository = transactionRepository;
         this.reservationRepository = reservationRepository;
@@ -64,6 +66,7 @@ public class PaymentCallbackService {
         this.equipmentStatusService = equipmentStatusService;
         this.auditLogService = auditLogService;
         this.eventPublisher = eventPublisher;
+        this.dispatchService = dispatchService;
     }
 
     @Transactional
@@ -107,6 +110,10 @@ public class PaymentCallbackService {
                                              PaymentOrder order,
                                              Reservation reservation) {
         if (request.type() == PaymentTransactionType.PAYMENT) {
+            if (order.getStatus() == PaymentOrderStatus.CLOSED) {
+                applyLatePayment(request, order, reservation);
+                return;
+            }
             Instant paymentDeadline = reservation.getPaymentDeadline();
             order.applyPayment(request.amountCents());
             if (reservation.getStatus() == ReservationStatus.AWAITING_PAYMENT) {
@@ -126,5 +133,28 @@ public class PaymentCallbackService {
             auditLogService.recordSystem("REFUND_SUCCEEDED", "RESERVATION", reservation.getId(),
                     "退款到账 订单号 " + order.getOrderNo() + "，金额 " + request.amountCents() + " 分");
         }
+    }
+
+    /**
+     * The money arrived after the payment window had already closed the
+     * reservation and given the slot back.
+     *
+     * <p>The reservation stays closed — someone else may hold that slot by now, and
+     * resurrecting it would double-book the equipment. But the payment is real, so
+     * it is recorded, the order moves to REFUND_DUE to say the platform is holding
+     * money it should not be, and a compensating refund is queued. Nothing here can
+     * be left to reconciliation: the channel collected and the ledger recorded, so
+     * both sides agree and the books look perfect while the user is out of pocket.
+     */
+    private void applyLatePayment(PaymentCallbackRequest request, PaymentOrder order, Reservation reservation) {
+        order.applyLatePayment(request.amountCents());
+        dispatchService.enqueue(
+                order.getOrderNo(),
+                PaymentTransactionType.REFUND,
+                request.amountCents(),
+                PaymentIdempotency.latePaymentRefund(order.getOrderNo()));
+        auditLogService.recordSystem("PAYMENT_ARRIVED_LATE", "RESERVATION", reservation.getId(),
+                "支付在窗口关闭后到账 订单号 " + order.getOrderNo() + "，金额 " + request.amountCents()
+                        + " 分，已发起补偿退款");
     }
 }

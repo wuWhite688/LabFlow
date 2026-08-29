@@ -63,6 +63,9 @@ class DuplicatePaymentInitiationIntegrationTest {
     @Autowired
     private ReconciliationService reconciliationService;
 
+    @Autowired
+    private com.arthur.labops.payment.PaymentRequestRepository requestRepository;
+
     private PaymentScenario scenario;
 
     @BeforeEach
@@ -70,6 +73,12 @@ class DuplicatePaymentInitiationIntegrationTest {
         TestAuth.clearCache();
         channel.reset();
         scenario = new PaymentScenario(mockMvc, objectMapper);
+    }
+
+    private java.util.List<com.arthur.labops.payment.channel.ChannelEntry> channelPayments(String orderNo) {
+        return channel.ledger().stream()
+                .filter(entry -> entry.orderNo().equals(orderNo) && entry.type() == ChannelEntryType.PAYMENT)
+                .toList();
     }
 
     @Test
@@ -84,10 +93,17 @@ class DuplicatePaymentInitiationIntegrationTest {
         assertThat(scenario.payViaApi(orderNo, "student", "student123")).isEqualTo(200);
         scenario.payViaApi(orderNo, "student", "student123");
 
-        assertThat(channel.ledger())
+        // One intent, so one outbound request. Decided synchronously by the unique
+        // index on the idempotency key, before anything reaches the channel.
+        assertThat(requestRepository.findByOrderNoOrderByIdAsc(orderNo))
+                .as("a second tap must not owe a second payment")
+                .hasSize(1);
+
+        Await.until("the charge to reach the channel", () -> !channelPayments(orderNo).isEmpty());
+        Await.settle();
+
+        assertThat(channelPayments(orderNo))
                 .as("one order, one full payment — a second tap must not create a second real charge")
-                .filteredOn(entry -> entry.orderNo().equals(orderNo)
-                        && entry.type() == ChannelEntryType.PAYMENT)
                 .hasSize(1);
 
         channel.deliverPending();

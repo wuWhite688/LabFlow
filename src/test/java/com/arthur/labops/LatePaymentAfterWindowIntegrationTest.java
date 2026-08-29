@@ -77,6 +77,9 @@ class LatePaymentAfterWindowIntegrationTest {
 
         // The user pays, but the callback is held up.
         scenario.payViaApi(orderNo, "student", "student123");
+        Await.until("the charge to reach the channel", () -> channel.ledger().stream()
+                .anyMatch(entry -> entry.orderNo().equals(orderNo)
+                        && entry.type() == ChannelEntryType.PAYMENT));
         awaitReservation(reservationId, ReservationStatus.EXPIRED);
         assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getStatus())
                 .isEqualTo(PaymentOrderStatus.CLOSED);
@@ -96,6 +99,10 @@ class LatePaymentAfterWindowIntegrationTest {
                 .as("collected against a closed reservation means we owe it back, not that the order is settled")
                 .isEqualTo(PaymentOrderStatus.REFUND_DUE);
 
+        Await.until("the compensating refund to be requested from the channel",
+                () -> channel.ledger().stream()
+                        .anyMatch(entry -> entry.orderNo().equals(orderNo)
+                                && entry.type() == ChannelEntryType.REFUND));
         assertThat(channel.ledger())
                 .as("a compensating refund must actually be requested from the channel")
                 .filteredOn(entry -> entry.orderNo().equals(orderNo)

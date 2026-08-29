@@ -179,7 +179,23 @@ public class ReservationService {
             reservation.approve();
             return;
         }
-        Instant deadline = Instant.now().plus(paymentWindow);
+        Instant now = Instant.now();
+        if (!reservation.getStartTime().isAfter(now)) {
+            // A priced reservation whose slot has already begun cannot be given a
+            // payment window at all: any window would run into time the user is
+            // supposed to already be using, and closing it would take the slot away
+            // mid-session.
+            throw new BusinessException(
+                    "RESERVATION_START_ALREADY_PASSED",
+                    "预约开始时间已过，无法进入支付流程，请重新预约",
+                    HttpStatus.CONFLICT);
+        }
+        // Never let the window outlive the slot it is holding. A reservation
+        // starting in two minutes must not get ten minutes to pay for it.
+        Instant windowEnd = now.plus(paymentWindow);
+        Instant deadline = windowEnd.isBefore(reservation.getStartTime())
+                ? windowEnd
+                : reservation.getStartTime();
         reservation.awaitPayment(deadline);
         paymentGateway.openOrder(reservation, amountCents);
         eventPublisher.publishEvent(ReservationDeadlineEvent.arm(
@@ -187,16 +203,25 @@ public class ReservationService {
     }
 
     /**
-     * Price is per hour, charged per started minute and rounded up to the cent so
-     * the platform never under-bills by a rounding error.
+     * Price is per hour, charged per <em>started</em> minute and rounded up to the
+     * cent so the platform never under-bills by a rounding error.
+     *
+     * <p>Both roundings are up, and both matter. {@code Duration.toMinutes()}
+     * truncates, so billing straight off it charges 1 minute for 1m59s — and
+     * charges <em>nothing</em> for anything under a minute, which then falls
+     * through the {@code amount <= 0} branch and is silently treated as free
+     * equipment. Reservations have no minimum length, so that was reachable.
      */
     private long amountCentsFor(Reservation reservation, Equipment equipment) {
         long hourlyPriceCents = equipment.getHourlyPriceCents();
         if (hourlyPriceCents <= 0) {
             return 0L;
         }
-        long minutes = Duration.between(reservation.getStartTime(), reservation.getEndTime()).toMinutes();
-        return Math.ceilDiv(hourlyPriceCents * minutes, 60L);
+        long seconds = Duration.between(reservation.getStartTime(), reservation.getEndTime()).toSeconds();
+        long startedMinutes = Math.ceilDiv(seconds, 60L);
+        // Bounded by the max-duration rule and the price ceiling on Equipment, so
+        // this cannot overflow in practice — exact rather than wrapping if it ever does.
+        return Math.ceilDiv(Math.multiplyExact(hourlyPriceCents, startedMinutes), 60L);
     }
 
     private String decisionDetail(Reservation reservation) {

@@ -150,7 +150,11 @@ class ReservationPaymentWindowIntegrationTest {
                 .as("cancelling paid money does not close the reservation until the refund lands")
                 .isEqualTo(ReservationStatus.REFUNDING);
 
-        // The refund request went to the channel after commit; its callback is queued.
+        // The refund request leaves on a pool thread after commit, so wait for it to
+        // reach the channel before draining the callback it queues.
+        Await.until("the refund to reach the channel", () -> channel.ledger().stream()
+                .anyMatch(entry -> entry.orderNo().equals(orderNo)
+                        && entry.type() == com.arthur.labops.payment.channel.ChannelEntryType.REFUND));
         assertThat(channel.deliverPending()).isEqualTo(1);
 
         assertThat(reservationRepository.findById(reservationId).orElseThrow().getStatus())

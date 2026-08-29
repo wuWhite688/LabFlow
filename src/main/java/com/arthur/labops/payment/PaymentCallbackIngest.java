@@ -22,18 +22,31 @@ public class PaymentCallbackIngest {
     private static final Logger log = LoggerFactory.getLogger(PaymentCallbackIngest.class);
 
     private final PaymentCallbackService callbackService;
+    private final PaymentTransactionRepository transactionRepository;
 
-    public PaymentCallbackIngest(PaymentCallbackService callbackService) {
+    public PaymentCallbackIngest(PaymentCallbackService callbackService,
+                                 PaymentTransactionRepository transactionRepository) {
         this.callbackService = callbackService;
+        this.transactionRepository = transactionRepository;
     }
 
     public PaymentCallbackResult ingest(PaymentCallbackRequest request) {
         try {
             return callbackService.handle(request);
-        } catch (DataIntegrityViolationException duplicate) {
-            log.info("Payment callback lost the idempotency race orderNo={} idempotencyKey={}",
-                    request.orderNo(), request.idempotencyKey());
-            return new PaymentCallbackResult(request.orderNo(), false, null);
+        } catch (DataIntegrityViolationException violation) {
+            // Not every constraint violation is a duplicate. Now that the failed
+            // transaction has rolled back, ask the database which one this was:
+            // if the key is really there, someone else recorded it and there is
+            // nothing to do. Otherwise this was some other broken write, and
+            // swallowing it would report success for money we never recorded.
+            if (transactionRepository.findByIdempotencyKey(request.idempotencyKey()).isPresent()) {
+                log.info("Payment callback lost the idempotency race orderNo={} idempotencyKey={}",
+                        request.orderNo(), request.idempotencyKey());
+                return new PaymentCallbackResult(request.orderNo(), false, null);
+            }
+            log.error("Payment callback failed on a constraint that is not the idempotency key orderNo={}",
+                    request.orderNo(), violation);
+            throw violation;
         }
     }
 }

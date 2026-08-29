@@ -94,6 +94,9 @@ class FaultReportRefundsPaidReservationIntegrationTest {
                 .as("a paid reservation cancelled by a fault report owes the user a refund")
                 .isEqualTo(ReservationStatus.REFUNDING);
 
+        Await.until("the refund to reach the channel", () -> channel.ledger().stream()
+                .anyMatch(entry -> entry.orderNo().equals(orderNo)
+                        && entry.type() == com.arthur.labops.payment.channel.ChannelEntryType.REFUND));
         assertThat(channel.deliverPending())
                 .as("the refund was actually requested from the channel")
                 .isEqualTo(1);

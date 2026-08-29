@@ -45,6 +45,7 @@ public class SimulatedPaymentChannel {
     private final java.util.concurrent.atomic.AtomicInteger failNextOutbound =
             new java.util.concurrent.atomic.AtomicInteger();
     private final List<ChannelEntry> ledger = new ArrayList<>();
+    private final java.util.Map<String, ChannelEntry> byMerchantKey = new java.util.HashMap<>();
     private final Deque<ChannelCallback> pending = new ArrayDeque<>();
     private final List<ChannelCallback> delivered = new ArrayList<>();
 
@@ -56,12 +57,35 @@ public class SimulatedPaymentChannel {
         this.taskScheduler = taskScheduler;
     }
 
+    /**
+     * Charge without a merchant key — models an action taken at the channel's own
+     * end (an operator issuing a refund, a payer completing a payment in the
+     * channel's app). Each call is a distinct transaction, as it would be.
+     */
     public ChannelEntry charge(String orderNo, long amountCents) {
-        return record(orderNo, ChannelEntryType.PAYMENT, amountCents);
+        return record(orderNo, ChannelEntryType.PAYMENT, amountCents, null);
     }
 
     public ChannelEntry refund(String orderNo, long amountCents) {
-        return record(orderNo, ChannelEntryType.REFUND, amountCents);
+        return record(orderNo, ChannelEntryType.REFUND, amountCents, null);
+    }
+
+    /**
+     * Charge under a merchant idempotency key. Presenting the same key again
+     * returns the transaction already created for it instead of creating a
+     * second one — which is what a real gateway does, and the only thing that can
+     * stop a duplicate <em>initiation</em> from taking the money twice.
+     *
+     * <p>Callback idempotency cannot cover this case: two separate charges have
+     * two separate transaction ids, so nothing downstream can tell they were
+     * meant to be one payment.
+     */
+    public ChannelEntry charge(String orderNo, long amountCents, String merchantIdempotencyKey) {
+        return record(orderNo, ChannelEntryType.PAYMENT, amountCents, merchantIdempotencyKey);
+    }
+
+    public ChannelEntry refund(String orderNo, long amountCents, String merchantIdempotencyKey) {
+        return record(orderNo, ChannelEntryType.REFUND, amountCents, merchantIdempotencyKey);
     }
 
     /**
@@ -74,9 +98,23 @@ public class SimulatedPaymentChannel {
         failNextOutbound.set(count);
     }
 
-    private ChannelEntry record(String orderNo, ChannelEntryType type, long amountCents) {
+    private ChannelEntry record(String orderNo, ChannelEntryType type, long amountCents,
+                                String merchantIdempotencyKey) {
         if (amountCents <= 0) {
             throw new IllegalArgumentException("渠道交易金额必须为正数");
+        }
+        if (merchantIdempotencyKey != null) {
+            synchronized (this) {
+                ChannelEntry existing = byMerchantKey.get(merchantIdempotencyKey);
+                if (existing != null) {
+                    // Same intent presented twice. Return the original transaction and
+                    // fire no second callback: from the channel's side nothing new
+                    // happened, which is precisely the guarantee being bought here.
+                    log.info("Simulated channel returning existing transaction for merchant key={} channelTxnId={}",
+                            merchantIdempotencyKey, existing.channelTxnId());
+                    return existing;
+                }
+            }
         }
         if (failNextOutbound.getAndUpdate(remaining -> Math.max(0, remaining - 1)) > 0) {
             log.warn("Simulated channel rejecting outbound {} orderNo={} (injected failure)", type, orderNo);
@@ -89,6 +127,9 @@ public class SimulatedPaymentChannel {
             entry = new ChannelEntry(
                     channelTxnId, orderNo, type, amountCents, ChannelEntry.STATUS_SUCCESS, Instant.now());
             ledger.add(entry);
+            if (merchantIdempotencyKey != null) {
+                byMerchantKey.put(merchantIdempotencyKey, entry);
+            }
             callback = ChannelCallback.of(entry);
             if (properties.getCallbackMode() != CallbackMode.IMMEDIATE) {
                 pending.addLast(callback);
@@ -201,6 +242,7 @@ public class SimulatedPaymentChannel {
      */
     public synchronized void reset() {
         ledger.clear();
+        byMerchantKey.clear();
         pending.clear();
         delivered.clear();
         failNextOutbound.set(0);

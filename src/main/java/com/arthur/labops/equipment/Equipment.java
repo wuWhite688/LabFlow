@@ -17,6 +17,9 @@ import jakarta.persistence.Version;
 @Table(name = "equipment")
 public class Equipment {
 
+    /** Ceiling so the billing multiplication cannot overflow: 1,000,000.00 per hour. */
+    public static final long MAX_HOURLY_PRICE_CENTS = 100_000_000L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -108,6 +111,9 @@ public class Equipment {
     public void setHourlyPriceCents(long hourlyPriceCents) {
         if (hourlyPriceCents < 0) {
             throw new IllegalArgumentException("设备价格不能为负数");
+        }
+        if (hourlyPriceCents > MAX_HOURLY_PRICE_CENTS) {
+            throw new IllegalArgumentException("设备价格超出上限");
         }
         this.hourlyPriceCents = hourlyPriceCents;
         this.updatedAt = Instant.now();

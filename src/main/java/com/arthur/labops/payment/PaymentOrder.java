@@ -101,6 +101,19 @@ public class PaymentOrder {
         this.updatedAt = Instant.now();
     }
 
+    /**
+     * Money that arrived after the order was already closed. It is real and has to
+     * be on the books, but the order is not settled by it — the platform is
+     * holding money for a reservation that no longer exists and owes it back.
+     * Folding this on as an ordinary payment is what produces the silent
+     * "reservation EXPIRED, order PAID, money kept" state.
+     */
+    public void applyLatePayment(long cents) {
+        this.paidCents += cents;
+        this.status = PaymentOrderStatus.REFUND_DUE;
+        this.updatedAt = Instant.now();
+    }
+
     public void applyRefund(long cents) {
         this.refundedCents += cents;
         this.status = this.refundedCents >= this.paidCents

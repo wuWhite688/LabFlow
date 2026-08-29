@@ -85,13 +85,14 @@ class RefundRequestRecoveryIntegrationTest {
         String orderNo = PaymentService.orderNoFor(reservationId);
 
         scenario.payViaApi(orderNo, "student", "student123");
-        assertThat(reservationRepository.findById(reservationId).orElseThrow().getStatus())
-                .isEqualTo(ReservationStatus.PAID);
+        awaitReservation(reservationId, ReservationStatus.PAID);
 
-        // The channel is unreachable exactly when we try to refund.
+        // Armed only once the payment is safely through, so the injected failure
+        // lands on the refund rather than on the charge.
         channel.failNextOutbound(1);
         assertThat(scenario.cancelAsStudent(reservationId).get("status")).isEqualTo("REFUNDING");
 
+        Await.settle();
         assertThat(channel.ledger())
                 .as("the first attempt genuinely did not reach the channel")
                 .filteredOn(entry -> entry.orderNo().equals(orderNo)
