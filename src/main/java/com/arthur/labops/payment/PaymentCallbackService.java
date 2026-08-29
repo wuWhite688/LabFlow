@@ -20,24 +20,7 @@ import com.arthur.labops.reservation.ReservationStatus;
 import com.arthur.labops.reservation.expiry.ReservationDeadlineEvent;
 import com.arthur.labops.reservation.expiry.ReservationDeadlineKind;
 
-/**
- * Applies one channel callback, exactly once.
- *
- * <p>Idempotency is two-layered. The lookup below absorbs the ordinary case — a
- * gateway redelivering because it never saw an acknowledgement — without
- * touching anything. The unique index on {@code idempotency_key} absorbs the
- * case the lookup structurally cannot: two deliveries in flight at the same
- * moment, both reading "not seen" before either writes. The loser's whole
- * transaction rolls back, which is the correct outcome — it applied nothing —
- * and {@link PaymentCallbackIngest} turns that into a quiet "already recorded"
- * rather than an error the channel would retry forever.
- *
- * <p>Locks in the platform-wide order — Equipment &rarr; Reservation &rarr; PaymentOrder.
- * The payment order is appended to the existing Equipment &rarr; Reservation order
- * rather than taken first: a callback and a cancellation touch the same three
- * rows from opposite ends of the system, and taking the order row first here
- * would reintroduce exactly the ABBA cycle the reservation path already fixed.
- */
+/** Applies one channel callback, exactly once where money moved. */
 @Service
 public class PaymentCallbackService {
 
@@ -91,9 +74,6 @@ public class PaymentCallbackService {
                         "PAYMENT_ORDER_NOT_FOUND", "支付订单不存在", HttpStatus.NOT_FOUND));
 
         if (!request.succeeded()) {
-            // A failed outcome moved no money, so it never belongs in the money
-            // ledger. It can, however, reopen the exact outbound attempt it
-            // rejected. An old rejection must never reopen a newer attempt.
             auditLogService.recordSystem("PAYMENT_CALLBACK_UNSUCCESSFUL", "RESERVATION",
                     unlocked.getReservationId(),
                     "渠道回调状态为 " + request.status() + "，订单号 " + request.orderNo() + "，不计入流水");
@@ -148,37 +128,30 @@ public class PaymentCallbackService {
     }
 
     /**
-     * Reopens only the exact channel-facing attempt that the FAILED outcome names.
-     *
-     * <p>The stable intent key answers "what do we owe?" while channelKey answers
-     * "which attempt just got a final no?". Once attempt #0 is rejected and #1 is
-     * SENT, a duplicate or delayed rejection for #0 is stale. Reopening #1 from
-     * that old callback would mint #2 even though #1 may already have succeeded.
+     * Reopen only the request whose <em>current</em> channel key is named by this
+     * FAILED outcome. That covers delayed SENT callbacks, synchronous PENDING
+     * callbacks, and a late definitive answer after a transport failure left the
+     * request FAILED. Once the first rejection advances #0 to #1, any duplicate or
+     * delayed #0 rejection no longer matches and is a no-op.
      */
     private void reopenRejectedRequest(PaymentCallbackRequest request) {
-        PaymentRequest outbound = requestRepository
-                .findFirstByOrderNoAndTypeAndStatusOrderByIdDesc(
-                        request.orderNo(), request.type(), PaymentRequestStatus.SENT)
+        PaymentRequest outbound = requestRepository.findByOrderNoOrderByIdAsc(request.orderNo()).stream()
+                .filter(candidate -> candidate.getType() == request.type())
+                .filter(candidate -> candidate.matchesChannelKey(request.idempotencyKey()))
+                .findFirst()
                 .orElse(null);
         if (outbound == null) {
+            log.info("Ignoring stale or unowned channel rejection orderNo={} callbackKey={}",
+                    request.orderNo(), request.idempotencyKey());
             return;
         }
-        if (!outbound.channelKey().equals(request.idempotencyKey())) {
-            auditLogService.recordSystem("PAYMENT_CALLBACK_STALE_REJECTION", "PAYMENT_ORDER",
-                    null,
-                    "忽略旧渠道失败回调：订单 " + request.orderNo()
-                            + "，回调 attemptKey=" + request.idempotencyKey()
-                            + "，当前 attemptKey=" + outbound.channelKey());
-            log.info("Ignoring stale channel rejection orderNo={} callbackKey={} currentKey={}",
-                    request.orderNo(), request.idempotencyKey(), outbound.channelKey());
-            return;
-        }
+
         String reason = "渠道回调状态 " + request.status() + "，交易号 " + request.channelTxnId();
         if (outbound.reopenAfterChannelRejection(reason)) {
             log.info("Outbound payment request reopened after channel rejection key={} channelAttempt={}",
                     outbound.getIdempotencyKey(), outbound.getChannelAttempt());
             eventPublisher.publishEvent(new PaymentRequestQueuedEvent(outbound.getIdempotencyKey()));
-        } else {
+        } else if (outbound.getStatus() == PaymentRequestStatus.ABANDONED) {
             ticketService.raiseOutboundHaltedTicket(outbound, reason + "，重试预算已用尽");
         }
     }

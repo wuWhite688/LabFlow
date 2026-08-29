@@ -16,10 +16,10 @@ import jakarta.persistence.Table;
  * One request the platform makes to the channel, and its delivery state.
  *
  * <p>{@code idempotencyKey} names the <em>intent</em>, not the attempt: "the full
- * payment for order X", "the cancellation refund for order X". Every attempt
- * presents the same key, so the channel collapses them into one transaction —
- * which is what lets this be retried at all without turning a stuck refund into
- * a double refund.
+ * payment for order X", "the cancellation refund for order X". Attempts use
+ * {@link #channelKey()}, which changes only after the channel gives a definitive
+ * rejection. A transport failure keeps the same channel key because the outcome
+ * is unknown and a fresh key could turn uncertainty into a duplicate payment.
  */
 @Entity
 @Table(name = "payment_requests")
@@ -99,15 +99,14 @@ public class PaymentRequest {
     public int getAttempts() { return attempts; }
     public int getChannelAttempt() { return channelAttempt; }
 
-    /**
-     * What the channel is asked to deduplicate on. Distinct from the intent key:
-     * the intent is still "the cancellation refund for order X" however many
-     * attempts it takes, but an attempt the channel has already refused cannot be
-     * revived by asking for it again under the name it refused.
-     */
     public String channelKey() {
         return channelAttempt == 0 ? idempotencyKey : idempotencyKey + "#" + channelAttempt;
     }
+
+    public boolean matchesChannelKey(String expectedChannelKey) {
+        return expectedChannelKey != null && channelKey().equals(expectedChannelKey);
+    }
+
     public String getLastError() { return lastError; }
     public Instant getNextAttemptAt() { return nextAttemptAt; }
 
@@ -118,11 +117,6 @@ public class PaymentRequest {
                 || status == PaymentRequestStatus.OBSOLETE;
     }
 
-    /**
-     * The intent no longer applies. Only reachable from a state where nothing has
-     * been sent yet — once the channel has accepted a request, the money is in
-     * flight and the answer is a refund, not an eraser.
-     */
     public boolean markObsolete() {
         if (isSettled()) {
             return false;
@@ -133,20 +127,32 @@ public class PaymentRequest {
     }
 
     /**
-     * The channel accepted this request and then reported that it failed. That is
-     * a final answer about the attempt, not about the intent — the money did not
-     * move, so the intent is still owed and has to go out again under a name the
-     * channel has not already closed.
+     * A definitive FAILED outcome belongs to one channel attempt. It may arrive
+     * after that attempt was marked SENT, synchronously while it is still PENDING,
+     * or after a transport exception left it FAILED. All three mean the same
+     * thing once the channel answers: that attempt moved no money, so the intent
+     * remains owed under a fresh channel key.
      *
-     * @return true when it is queued for another attempt, false when the retry
-     *         budget is spent and a human is needed instead
+     * <p>Only PENDING has not already charged the physical attempt to the retry
+     * budget. SENT was counted by markSent and FAILED by markFailed, so counting
+     * either of those again here would burn two retry slots for one channel call.
+     *
+     * @return true when queued for another channel attempt; false when the intent
+     *         was already terminal or the retry budget is exhausted
      */
     public boolean reopenAfterChannelRejection(String reason) {
-        if (status != PaymentRequestStatus.SENT) {
+        if (status == PaymentRequestStatus.ABANDONED || status == PaymentRequestStatus.OBSOLETE) {
             return false;
         }
+        if (status != PaymentRequestStatus.PENDING
+                && status != PaymentRequestStatus.FAILED
+                && status != PaymentRequestStatus.SENT) {
+            return false;
+        }
+        if (status == PaymentRequestStatus.PENDING) {
+            this.attempts += 1;
+        }
         this.channelAttempt += 1;
-        this.attempts += 1;
         this.lastError = reason == null ? null : reason.substring(0, Math.min(reason.length(), 500));
         this.updatedAt = Instant.now();
         if (attempts >= MAX_ATTEMPTS) {
@@ -175,8 +181,6 @@ public class PaymentRequest {
             return true;
         }
         this.status = PaymentRequestStatus.FAILED;
-        // Exponential backoff, capped. A channel that is down does not get hammered,
-        // and a channel that blipped is retried quickly.
         long backoffMillis = Math.min(
                 MAX_BACKOFF.toMillis(),
                 BASE_BACKOFF.toMillis() * (1L << Math.min(attempts - 1, 20)));
