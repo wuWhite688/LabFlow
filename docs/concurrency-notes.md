@@ -52,7 +52,7 @@ This change removes the identified `Equipment <-> Reservation` lock-order invers
 
 ## Refresh-token families
 
-Auth writers (refresh, logout, family-wide reuse revocation) are a separate lock tree from reservations. They must not acquire equipment or reservation row locks.
+Refresh/logout refresh-token state transactions are concentrated in `AuthRefreshTx`. `AuthService.login()` keeps its existing outer `@Transactional` and is not moved here. Auth writers (refresh, logout, family-wide reuse revocation) are a separate lock tree from reservations. They must not acquire equipment or reservation row locks.
 
 Order inside the auth tree:
 

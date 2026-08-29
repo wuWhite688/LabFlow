@@ -3,6 +3,11 @@
 -- independent session). Already-revoked rows backfill as LOGOUT so a
 -- post-deploy replay of a historical rotated hash is not a reuse alarm.
 --
+-- V17 cannot rebuild pre-upgrade rotation lineage. Old tokens are one
+-- family per row; historically revoked rows are labelled LOGOUT. Family
+-- reuse detection applies fully to rotations created after this migration.
+-- Existing sessions are not force-logged-out.
+--
 -- Intentionally omitted: replaced_by_token_id (family.current_token_id plus
 -- token.revoke_reason=ROTATED is enough to detect ancestor reuse) and any
 -- purge scheduler (storage cleanup is a follow-up, not this vulnerability).
@@ -59,3 +64,8 @@ alter table refresh_token_families
         on delete set null;
 
 create index idx_refresh_token_family_id on refresh_tokens(family_id);
+
+-- DEFAULT 0 is only a backfill vehicle so the NOT NULL add succeeds on H2
+-- and MySQL 8.4. After rows have real family ids and the FK is in place,
+-- drop it so new inserts cannot silently land on family_id = 0.
+alter table refresh_tokens alter column family_id drop default;

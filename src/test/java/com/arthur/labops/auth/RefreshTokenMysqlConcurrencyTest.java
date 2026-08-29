@@ -92,6 +92,30 @@ class RefreshTokenMysqlConcurrencyTest {
     }
 
     @Test
+    void familyIdColumnIsNotNullWithoutDefaultZero() {
+        String columnDefault = jdbcTemplate.queryForObject(
+                """
+                        select column_default
+                          from information_schema.columns
+                         where table_schema = database()
+                           and table_name = 'refresh_tokens'
+                           and column_name = 'family_id'
+                        """,
+                String.class);
+        String nullable = jdbcTemplate.queryForObject(
+                """
+                        select is_nullable
+                          from information_schema.columns
+                         where table_schema = database()
+                           and table_name = 'refresh_tokens'
+                           and column_name = 'family_id'
+                        """,
+                String.class);
+        assertThat(columnDefault).isNull();
+        assertThat(nullable).isEqualTo("NO");
+    }
+
+    @Test
     void concurrentRefreshOnMysqlLeavesZeroActiveAndKillsWinnerSuccessor() throws Exception {
         Cookie refresh = refreshCookie(login());
         CountDownLatch ready = new CountDownLatch(2);

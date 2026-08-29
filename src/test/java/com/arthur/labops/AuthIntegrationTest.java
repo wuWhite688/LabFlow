@@ -421,6 +421,12 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void familyIdColumnIsNotNullWithoutDefaultZero() {
+        assertThat(familyIdColumnDefault()).isNull();
+        assertThat(familyIdColumnNullable()).isFalse();
+    }
+
+    @Test
     void unknownRefreshCookieIsUnauthorized() throws Exception {
         mockMvc.perform(post("/api/auth/refresh")
                         .cookie(new Cookie(REFRESH_COOKIE_NAME, "not-a-real-refresh-token")))
@@ -549,6 +555,29 @@ class AuthIntegrationTest {
                 Timestamp.class,
                 hashToken(cookie.getValue()));
         return revokedAt != null;
+    }
+
+    private String familyIdColumnDefault() {
+        return jdbcTemplate.queryForObject(
+                """
+                        select column_default
+                          from information_schema.columns
+                         where lower(table_name) = 'refresh_tokens'
+                           and lower(column_name) = 'family_id'
+                        """,
+                String.class);
+    }
+
+    private boolean familyIdColumnNullable() {
+        String nullable = jdbcTemplate.queryForObject(
+                """
+                        select is_nullable
+                          from information_schema.columns
+                         where lower(table_name) = 'refresh_tokens'
+                           and lower(column_name) = 'family_id'
+                        """,
+                String.class);
+        return nullable != null && nullable.equalsIgnoreCase("YES");
     }
 
     private static String hashToken(String raw) {
