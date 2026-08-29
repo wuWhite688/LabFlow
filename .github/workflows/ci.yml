@@ -65,6 +65,20 @@ jobs:
             exit 1
           fi
 
+      - name: 确认 MySQL refresh-token 并发回归已执行
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="target/surefire-reports/TEST-com.arthur.labops.auth.RefreshTokenMysqlConcurrencyTest.xml"
+          test -f "$report"
+          grep -Eq '<testsuite [^>]*tests="[1-9][0-9]*"' "$report"
+          if grep -q '<skipped' "$report"; then
+            echo "MySQL refresh-token 并发回归被跳过，Docker/Testcontainers 未就绪：" >&2
+            grep -E '<testsuite |<skipped' "$report" >&2
+            exit 1
+          fi
+
+
       # 失败时同样上传，否则排查 CI 红灯只能靠日志里被截断的堆栈
       - name: 上传测试报告
         if: always()

@@ -257,7 +257,7 @@ production：`labops.reservation-expiry.mode=rabbit`。
 
 ## 认证与安全默认
 
-- Access JWT（HS256，默认 15 分钟）只放前端内存；Refresh 是不透明随机串，HttpOnly Cookie，库里只存 SHA-256，事务内 `FOR UPDATE` 轮换
+- Access JWT（HS256，默认 15 分钟）只放前端内存；Refresh 是不透明随机串，HttpOnly Cookie，库里只存 SHA-256。每次登录建一个 refresh family，成功 refresh 在族内轮换；出示已轮换成员且族内仍有活后继时整族吊销。并发双刷同一 cookie 以防盗优先，结束后 0 条 active refresh；Access JWT 语义不变（登出/reuse 后仍可用至过期）
 - 过滤器每次查库：用户删除/停用立即 401；权限用数据库角色，JWT 里的 role 不算数
 - 登录限流：IP+用户名 与 IP 总量（默认 5 / 20 / 15 分钟）；BFF 优先取 Cloudflare/Vercel 的边缘地址并覆盖为 `X-BFF-Client-IP`，后端只在 loopback/私有服务网来源上信任它，所以后端仍须保持内网可达
 - 默认 `server.address=127.0.0.1`；非 loopback 禁止 demo 账号/种子，并拒绝占位 JWT

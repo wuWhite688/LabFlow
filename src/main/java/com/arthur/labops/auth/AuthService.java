@@ -2,11 +2,12 @@ package com.arthur.labops.auth;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.SecureRandom;
-import java.time.Instant;
-import java.util.Base64;
 import java.util.HexFormat;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -16,32 +17,29 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.arthur.labops.common.BusinessException;
-import com.arthur.labops.user.CurrentUserResponse;
 import com.arthur.labops.user.PlatformUser;
 import com.arthur.labops.user.PlatformUserRepository;
+
+import jakarta.persistence.OptimisticLockException;
 
 @Service
 public class AuthService {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+    private static final String INVALID_REFRESH_MESSAGE = "刷新令牌无效或已失效";
+
     private final AuthenticationManager authenticationManager;
     private final PlatformUserRepository userRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
-    private final JwtService jwtService;
-    private final JwtProperties jwtProperties;
+    private final AuthRefreshTx authRefreshTx;
     private final LoginAttemptGuard loginAttemptGuard;
-    private final SecureRandom secureRandom = new SecureRandom();
 
     public AuthService(AuthenticationManager authenticationManager,
                        PlatformUserRepository userRepository,
-                       RefreshTokenRepository refreshTokenRepository,
-                       JwtService jwtService,
-                       JwtProperties jwtProperties,
+                       AuthRefreshTx authRefreshTx,
                        LoginAttemptGuard loginAttemptGuard) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
-        this.refreshTokenRepository = refreshTokenRepository;
-        this.jwtService = jwtService;
-        this.jwtProperties = jwtProperties;
+        this.authRefreshTx = authRefreshTx;
         this.loginAttemptGuard = loginAttemptGuard;
     }
 
@@ -70,70 +68,97 @@ public class AuthService {
         PlatformUser user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("INVALID_CREDENTIALS", "用户名或密码错误", HttpStatus.UNAUTHORIZED));
         loginAttemptGuard.recordSuccess(clientIp, username);
-        return issueTokens(user);
+        return authRefreshTx.issueLoginSession(user);
     }
 
-    @Transactional
     public IssuedAuthSession refresh(String rawRefreshToken) {
         String raw = requireRefreshToken(rawRefreshToken);
-        RefreshToken stored = refreshTokenRepository.findByTokenHashForUpdate(hashToken(raw))
-                .orElseThrow(() -> new BusinessException(
-                        "INVALID_REFRESH_TOKEN", "刷新令牌无效或已失效", HttpStatus.UNAUTHORIZED));
-
-        Instant now = Instant.now();
-        if (!stored.isActive(now)) {
-            throw new BusinessException(
-                    "INVALID_REFRESH_TOKEN", "刷新令牌无效或已失效", HttpStatus.UNAUTHORIZED);
+        try {
+            return mapOutcome(authRefreshTx.refreshInTx(raw));
+        } catch (RuntimeException exception) {
+            if (!isLockFailure(exception)) {
+                throw exception;
+            }
+            log.info("refresh lock conflict, retrying once");
+            try {
+                return mapOutcome(authRefreshTx.refreshInTx(raw));
+            } catch (RuntimeException retry) {
+                if (!isLockFailure(retry)) {
+                    throw retry;
+                }
+                return mapOutcome(terminateAfterLockFailure(raw));
+            }
         }
-
-        PlatformUser user = stored.getUser();
-        if (!user.isEnabled()) {
-            stored.revoke(now);
-            throw new BusinessException("USER_DISABLED", "账号已停用", HttpStatus.UNAUTHORIZED);
-        }
-
-        // Rotation: revoke old refresh token, issue a new pair.
-        stored.revoke(now);
-        return issueTokens(user);
     }
 
-    @Transactional
     public void logout(String rawRefreshToken) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
             return;
         }
         String raw = rawRefreshToken.trim();
-        refreshTokenRepository.findByTokenHashForUpdate(hashToken(raw)).ifPresent(token -> {
-            if (token.getRevokedAt() == null) {
-                token.revoke(Instant.now());
+        try {
+            authRefreshTx.logoutInTx(raw);
+        } catch (RuntimeException exception) {
+            if (!isLockFailure(exception)) {
+                throw exception;
             }
-        });
+            try {
+                authRefreshTx.logoutInTx(raw);
+            } catch (RuntimeException retry) {
+                if (!isLockFailure(retry)) {
+                    throw retry;
+                }
+            }
+        }
     }
 
-    private IssuedAuthSession issueTokens(PlatformUser user) {
-        String accessToken = jwtService.createAccessToken(user);
-        String rawRefresh = generateRefreshToken();
-        Instant refreshExp = Instant.now().plus(jwtProperties.getRefreshTokenTtl());
-        refreshTokenRepository.save(new RefreshToken(user, hashToken(rawRefresh), refreshExp));
-        AuthResponse response = AuthResponse.of(
-                accessToken,
-                jwtService.accessTokenTtlSeconds(),
-                CurrentUserResponse.from(user));
-        return new IssuedAuthSession(response, rawRefresh);
+    private RefreshOutcome terminateAfterLockFailure(String raw) {
+        try {
+            return authRefreshTx.terminateLiveFamilyInTx(raw);
+        } catch (RuntimeException exception) {
+            if (!isLockFailure(exception)) {
+                throw exception;
+            }
+            try {
+                return authRefreshTx.terminateLiveFamilyInTx(raw);
+            } catch (RuntimeException retry) {
+                if (isLockFailure(retry)) {
+                    return RefreshOutcome.invalid();
+                }
+                throw retry;
+            }
+        }
+    }
+
+    private IssuedAuthSession mapOutcome(RefreshOutcome outcome) {
+        return switch (outcome.kind()) {
+            case ISSUED -> outcome.session();
+            case REUSED, INVALID -> throw invalidRefresh();
+            case DISABLED -> throw new BusinessException("USER_DISABLED", "账号已停用", HttpStatus.UNAUTHORIZED);
+        };
     }
 
     private String requireRefreshToken(String rawRefreshToken) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
-            throw new BusinessException(
-                    "INVALID_REFRESH_TOKEN", "刷新令牌无效或已失效", HttpStatus.UNAUTHORIZED);
+            throw invalidRefresh();
         }
         return rawRefreshToken.trim();
     }
 
-    private String generateRefreshToken() {
-        byte[] bytes = new byte[32];
-        secureRandom.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    private static BusinessException invalidRefresh() {
+        return new BusinessException("INVALID_REFRESH_TOKEN", INVALID_REFRESH_MESSAGE, HttpStatus.UNAUTHORIZED);
+    }
+
+    static boolean isLockFailure(Throwable error) {
+        while (error != null) {
+            if (error instanceof PessimisticLockingFailureException
+                    || error instanceof OptimisticLockingFailureException
+                    || error instanceof OptimisticLockException) {
+                return true;
+            }
+            error = error.getCause();
+        }
+        return false;
     }
 
     static String hashToken(String rawToken) {
