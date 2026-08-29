@@ -50,6 +50,25 @@ H2 can verify: both threads return, no 500, and (with `@Version`) no silent lost
 
 This change removes the identified `Equipment <-> Reservation` lock-order inversion. It does not claim that every possible database deadlock is impossible; future code that introduces new multi-entity locking should preserve the same global ordering rule.
 
+## Refresh-token families
+
+Refresh/logout refresh-token state transactions are concentrated in `AuthRefreshTx`. `AuthService.login()` keeps its existing outer `@Transactional` and is not moved here. Auth writers (refresh, logout, family-wide reuse revocation) are a separate lock tree from reservations. They must not acquire equipment or reservation row locks.
+
+Order inside the auth tree:
+
+`refresh_token_families -> presented refresh_tokens row`
+
+1. Unlocked hash lookup only to learn `family_id`.
+2. `SELECT family FOR UPDATE` (and family `@Version` so H2 serializes lost updates).
+3. `SELECT presented token FOR UPDATE`.
+4. Sibling revocation is `UPDATE refresh_tokens SET revoked_at=… WHERE family_id=? AND revoked_at IS NULL` while already holding the family lock. Do not `FOR UPDATE` the current successor in arbitrary id order.
+
+Token-first locking deadlocks with reuse: refresh of B holds B then waits for the family; replay of rotated A holds A then the family then tries to update B.
+
+H2 `FOR UPDATE` does not serialize; family `@Version` is the CI-stable backstop, same idea as `Reservation.version`. Concurrent double-refresh of still-active A is treated as reuse: at most one HTTP 200, then the family is compromised and **0** active refresh rows remain. The winner's access JWT still works until TTL.
+
+`RefreshTokenMysqlConcurrencyTest` repeats the concurrent + replay cases against MySQL 8.4 via Testcontainers when Docker is present. GitHub Actions must actually run that class (not skip it).
+
 ## Redis lock, Rabbit expiry, and compensation
 
 Three test layers:

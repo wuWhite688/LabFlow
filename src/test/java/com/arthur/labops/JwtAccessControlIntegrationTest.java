@@ -73,6 +73,7 @@ class JwtAccessControlIntegrationTest {
                 "jwt-gone", passwordEncoder.encode("pass-gone-1"), "临时用户", UserRole.STUDENT));
         String token = loginAccessHeader(mockMvc, objectMapper, "jwt-gone", "pass-gone-1");
         jdbcTemplate.update("delete from refresh_tokens where user_id = ?", temp.getId());
+        jdbcTemplate.update("delete from refresh_token_families where user_id = ?", temp.getId());
         userRepository.deleteById(temp.getId());
         userRepository.flush();
 

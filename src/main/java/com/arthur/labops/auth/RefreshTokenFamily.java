@@ -15,10 +15,11 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 @Entity
-@Table(name = "refresh_tokens")
-public class RefreshToken {
+@Table(name = "refresh_token_families")
+public class RefreshTokenFamily {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -28,15 +29,8 @@ public class RefreshToken {
     @JoinColumn(name = "user_id", nullable = false)
     private PlatformUser user;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "family_id", nullable = false)
-    private RefreshTokenFamily family;
-
-    @Column(name = "token_hash", nullable = false, unique = true, length = 64)
-    private String tokenHash;
-
-    @Column(name = "expires_at", nullable = false)
-    private Instant expiresAt;
+    @Column(name = "current_token_id")
+    private Long currentTokenId;
 
     @Column(name = "revoked_at")
     private Instant revokedAt;
@@ -45,30 +39,36 @@ public class RefreshToken {
     @Column(name = "revoke_reason", length = 32)
     private RefreshTokenRevokeReason revokeReason;
 
+    /**
+     * Second-line lost-update detection. Family {@code PESSIMISTIC_WRITE} is the
+     * primary correctness guarantee on MySQL; {@code @Version} makes concurrent
+     * refresh writers fail on H2 where {@code FOR UPDATE} does not serialize.
+     */
+    @Version
+    private long version;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    protected RefreshToken() {
+    protected RefreshTokenFamily() {
     }
 
-    public RefreshToken(PlatformUser user, RefreshTokenFamily family, String tokenHash, Instant expiresAt) {
+    public RefreshTokenFamily(PlatformUser user) {
         this.user = user;
-        this.family = family;
-        this.tokenHash = tokenHash;
-        this.expiresAt = expiresAt;
         this.createdAt = Instant.now();
     }
 
-    public boolean isActive(Instant now) {
-        return revokedAt == null && expiresAt.isAfter(now);
+    public boolean isTerminal() {
+        return revokedAt != null;
     }
 
-    public void revoke(Instant now, RefreshTokenRevokeReason reason) {
-        if (this.revokedAt != null) {
+    public void terminate(Instant now, RefreshTokenRevokeReason reason) {
+        if (revokedAt != null) {
             return;
         }
         this.revokedAt = now;
         this.revokeReason = reason;
+        this.currentTokenId = null;
     }
 
     public Long getId() {
@@ -79,16 +79,12 @@ public class RefreshToken {
         return user;
     }
 
-    public RefreshTokenFamily getFamily() {
-        return family;
+    public Long getCurrentTokenId() {
+        return currentTokenId;
     }
 
-    public String getTokenHash() {
-        return tokenHash;
-    }
-
-    public Instant getExpiresAt() {
-        return expiresAt;
+    public void setCurrentTokenId(Long currentTokenId) {
+        this.currentTokenId = currentTokenId;
     }
 
     public Instant getRevokedAt() {
@@ -97,5 +93,9 @@ public class RefreshToken {
 
     public RefreshTokenRevokeReason getRevokeReason() {
         return revokeReason;
+    }
+
+    public long getVersion() {
+        return version;
     }
 }
