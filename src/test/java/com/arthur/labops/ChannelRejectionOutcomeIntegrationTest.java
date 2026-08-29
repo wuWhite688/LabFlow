@@ -1,26 +1,17 @@
 package com.arthur.labops;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-import java.time.Instant;
-import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.arthur.labops.payment.PaymentController;
-import com.arthur.labops.payment.PaymentDispatchService;
 import com.arthur.labops.payment.PaymentIdempotency;
 import com.arthur.labops.payment.PaymentOrderRepository;
 import com.arthur.labops.payment.PaymentOrderStatus;
-import com.arthur.labops.payment.PaymentProperties;
 import com.arthur.labops.payment.PaymentRequestRepository;
 import com.arthur.labops.payment.PaymentRequestStatus;
 import com.arthur.labops.payment.PaymentService;
@@ -32,20 +23,10 @@ import com.arthur.labops.reservation.ReservationStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * What happens after the channel says no.
- *
- * <p>The previous round taught the callback path not to treat a FAILED report as
- * money. It stopped there, and the outbound half never heard about it: the
- * request had already been marked SENT when the channel accepted it, SENT counts
- * as settled, and settled requests are never offered again. So a refund the
- * channel then rejected left the reservation in REFUNDING permanently, with the
- * money still at the channel and both ledgers holding only the original payment
- * — balanced books over a user who was never paid back.
- *
- * <p>Retrying it needs a fresh channel-facing key. The idempotency key names the
- * intent and must stay stable, but the channel has already made a final decision
- * about the attempt presented under it; asking again with the same one is a
- * guaranteed no-op at any gateway that honours idempotency at all.
+ * A terminal channel rejection is not a successful money movement with a FAILED
+ * label painted on afterwards. It is a final outcome for one channel attempt and
+ * must therefore do two things at once: write no money row, and reopen exactly
+ * the attempt that received the rejection — never a newer one.
  */
 @SpringBootTest(properties = {
         "labops.payment.window=10m",
@@ -75,12 +56,6 @@ class ChannelRejectionOutcomeIntegrationTest {
     @Autowired
     private ReservationRepository reservationRepository;
 
-    @Autowired
-    private PaymentDispatchService dispatchService;
-
-    @Autowired
-    private PaymentProperties paymentProperties;
-
     private PaymentScenario scenario;
 
     @BeforeEach
@@ -90,12 +65,8 @@ class ChannelRejectionOutcomeIntegrationTest {
         scenario = new PaymentScenario(mockMvc, objectMapper);
     }
 
-    /**
-     * A cancellation refund the channel accepts and then rejects. The user is owed
-     * their money and no automated path is left to send it again.
-     */
     @Test
-    void aRefundTheChannelRejectsIsSentAgainUnderAFreshKey() throws Exception {
+    void aTerminallyRejectedRefundRetriesButMovesMoneyOnlyOnce() throws Exception {
         Long equipmentId = scenario.createPricedEquipment("REJ-REF", HOURLY_PRICE_CENTS);
         Long reservationId = scenario.createReservation(equipmentId, 1);
         scenario.approve(reservationId);
@@ -107,66 +78,105 @@ class ChannelRejectionOutcomeIntegrationTest {
                 .isEqualTo(PaymentOrderStatus.PAID);
 
         String refundKey = PaymentIdempotency.cancellationRefund(orderNo);
+        channel.rejectNextOutboundFinal(1);
         scenario.cancelAsStudent(reservationId);
-        Await.until("the refund to be accepted by the channel", () ->
+
+        Await.until("the rejected refund attempt to be marked sent", () ->
                 requestRepository.findByIdempotencyKey(refundKey)
                         .filter(request -> request.getStatus() == PaymentRequestStatus.SENT)
                         .isPresent());
-        assertThat(refundEntries(orderNo)).hasSize(1);
-
-        // The channel changes its mind: the callback it queued never lands, and it
-        // reports the transaction as failed instead.
-        channel.discardPending();
-        postCallback(orderNo, lastRefund(orderNo).channelTxnId(), "REFUND", HOURLY_PRICE_CENTS, "FAILED")
-                .andExpect(status().isOk());
-
-        assertThat(requestRepository.findByIdempotencyKey(refundKey).orElseThrow().getStatus())
-                .as("a rejected attempt is not a delivered one; the refund is still owed")
-                .isNotEqualTo(PaymentRequestStatus.SENT);
-        assertThat(reservationRepository.findById(reservationId).orElseThrow().getStatus())
-                .isEqualTo(ReservationStatus.REFUNDING);
-
-        dispatchService.attempt(refundKey);
-        Await.until("a second refund attempt to reach the channel", () -> refundEntries(orderNo).size() == 2);
+        assertThat(refundEntries(orderNo))
+                .as("a terminal rejection is an outcome, not money")
+                .isEmpty();
 
         channel.deliverPending();
+
+        Await.until("a fresh refund attempt to reach the channel", () -> refundEntries(orderNo).size() == 1);
+        assertThat(requestRepository.findByIdempotencyKey(refundKey).orElseThrow().getChannelAttempt())
+                .isEqualTo(1);
+
+        channel.deliverPending();
+
+        assertThat(refundEntries(orderNo))
+                .as("one rejected attempt plus one successful retry still means one real refund")
+                .hasSize(1);
         assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getStatus())
                 .isEqualTo(PaymentOrderStatus.REFUNDED);
         assertThat(reservationRepository.findById(reservationId).orElseThrow().getStatus())
-                .as("the cancellation completes once the money is actually back")
                 .isEqualTo(ReservationStatus.CANCELLED);
     }
 
-    /**
-     * The mirror case. A payment the channel rejects leaves the order awaiting
-     * payment, which is correct — but the intent is stuck SENT, so tapping pay
-     * again produces nothing at all and the reservation quietly runs out its
-     * window.
-     */
     @Test
-    void aPaymentTheChannelRejectsCanBeAttemptedAgain() throws Exception {
+    void aTerminallyRejectedPaymentRetriesButChargesOnlyOnce() throws Exception {
         Long equipmentId = scenario.createPricedEquipment("REJ-PAY", HOURLY_PRICE_CENTS);
         Long reservationId = scenario.createReservation(equipmentId, 1);
         scenario.approve(reservationId);
         String orderNo = PaymentService.orderNoFor(reservationId);
+        String payKey = PaymentIdempotency.payment(orderNo);
 
+        channel.rejectNextOutboundFinal(1);
         assertThat(scenario.payViaApi(orderNo, "student", "student123")).isEqualTo(200);
-        Await.until("the first charge to reach the channel", () -> paymentEntries(orderNo).size() == 1);
 
-        channel.discardPending();
-        postCallback(orderNo, lastPayment(orderNo).channelTxnId(), "PAYMENT", HOURLY_PRICE_CENTS, "FAILED")
-                .andExpect(status().isOk());
-
-        assertThat(scenario.payViaApi(orderNo, "student", "student123"))
-                .as("the order is still payable, so asking to pay it must do something")
-                .isEqualTo(200);
-        Await.until("a second charge to reach the channel", () -> paymentEntries(orderNo).size() == 2);
+        Await.until("the rejected payment attempt to be marked sent", () ->
+                requestRepository.findByIdempotencyKey(payKey)
+                        .filter(request -> request.getStatus() == PaymentRequestStatus.SENT)
+                        .isPresent());
+        assertThat(paymentEntries(orderNo)).isEmpty();
 
         channel.deliverPending();
+        Await.until("a fresh payment attempt to reach the channel", () -> paymentEntries(orderNo).size() == 1);
+        channel.deliverPending();
+
+        assertThat(paymentEntries(orderNo)).hasSize(1);
         assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getStatus())
                 .isEqualTo(PaymentOrderStatus.PAID);
         assertThat(reservationRepository.findById(reservationId).orElseThrow().getStatus())
                 .isEqualTo(ReservationStatus.PAID);
+    }
+
+    @Test
+    void anOldFailedCallbackCannotReopenANewerSentAttempt() throws Exception {
+        Long equipmentId = scenario.createPricedEquipment("REJ-STALE", HOURLY_PRICE_CENTS);
+        Long reservationId = scenario.createReservation(equipmentId, 1);
+        scenario.approve(reservationId);
+        String orderNo = PaymentService.orderNoFor(reservationId);
+        String payKey = PaymentIdempotency.payment(orderNo);
+
+        channel.rejectNextOutboundFinal(1);
+        assertThat(scenario.payViaApi(orderNo, "student", "student123")).isEqualTo(200);
+        Await.until("attempt zero to be sent", () ->
+                requestRepository.findByIdempotencyKey(payKey)
+                        .filter(request -> request.getStatus() == PaymentRequestStatus.SENT)
+                        .isPresent());
+
+        // Deliver FAILED for attempt #0. The platform reopens the intent and sends
+        // attempt #1 under a fresh channel key; its SUCCESS callback stays queued.
+        channel.deliverPending();
+        Await.until("attempt one to be sent", () -> {
+            var request = requestRepository.findByIdempotencyKey(payKey).orElseThrow();
+            return request.getStatus() == PaymentRequestStatus.SENT
+                    && request.getChannelAttempt() == 1
+                    && paymentEntries(orderNo).size() == 1;
+        });
+
+        // The gateway redelivers the old FAILED outcome for #0 before SUCCESS for
+        // #1 arrives. It must be stale now, not evidence that #1 failed.
+        channel.redeliverAll();
+        Await.settle();
+
+        var afterReplay = requestRepository.findByIdempotencyKey(payKey).orElseThrow();
+        assertThat(afterReplay.getStatus()).isEqualTo(PaymentRequestStatus.SENT);
+        assertThat(afterReplay.getChannelAttempt())
+                .as("old #0 rejection must not mint attempt #2")
+                .isEqualTo(1);
+        assertThat(paymentEntries(orderNo))
+                .as("a stale FAILED callback must not create a second successful charge")
+                .hasSize(1);
+
+        channel.deliverPending();
+        assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getStatus())
+                .isEqualTo(PaymentOrderStatus.PAID);
+        assertThat(paymentEntries(orderNo)).hasSize(1);
     }
 
     private java.util.List<ChannelEntry> refundEntries(String orderNo) {
@@ -182,30 +192,5 @@ class ChannelRejectionOutcomeIntegrationTest {
                 .filter(entry -> entry.orderNo().equals(orderNo))
                 .filter(entry -> entry.type() == type)
                 .toList();
-    }
-
-    private ChannelEntry lastRefund(String orderNo) {
-        java.util.List<ChannelEntry> found = refundEntries(orderNo);
-        return found.get(found.size() - 1);
-    }
-
-    private ChannelEntry lastPayment(String orderNo) {
-        java.util.List<ChannelEntry> found = paymentEntries(orderNo);
-        return found.get(found.size() - 1);
-    }
-
-    private org.springframework.test.web.servlet.ResultActions postCallback(
-            String orderNo, String key, String type, long amountCents, String status) throws Exception {
-        return mockMvc.perform(post("/api/payments/callback")
-                .header(PaymentController.CALLBACK_TOKEN_HEADER, paymentProperties.getCallbackToken())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(Map.of(
-                        "orderNo", orderNo,
-                        "idempotencyKey", key,
-                        "type", type,
-                        "amountCents", amountCents,
-                        "channelTxnId", key,
-                        "status", status,
-                        "occurredAt", Instant.now().toString()))));
     }
 }
