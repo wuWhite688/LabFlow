@@ -91,16 +91,14 @@ public class PaymentCallbackService {
                         "PAYMENT_ORDER_NOT_FOUND", "支付订单不存在", HttpStatus.NOT_FOUND));
 
         if (!request.succeeded()) {
-            // The channel is reporting an outcome, not just an event. A failed
-            // attempt moved no money, so it has no place in a ledger whose whole
-            // meaning is "money that moved" — and folding it onto the order would
-            // mark an unpaid reservation as paid. Recorded in the audit trail and
-            // acknowledged, so the channel stops retrying it.
+            // A failed outcome moved no money, so it never belongs in the money
+            // ledger. It can, however, reopen the exact outbound attempt it
+            // rejected. An old rejection must never reopen a newer attempt.
             auditLogService.recordSystem("PAYMENT_CALLBACK_UNSUCCESSFUL", "RESERVATION",
                     unlocked.getReservationId(),
                     "渠道回调状态为 " + request.status() + "，订单号 " + request.orderNo() + "，不计入流水");
-            log.info("Payment callback ignored, channel status={} orderNo={}",
-                    request.status(), request.orderNo());
+            log.info("Payment callback ignored, channel status={} orderNo={} attemptKey={}",
+                    request.status(), request.orderNo(), request.idempotencyKey());
             reopenRejectedRequest(request);
             return new PaymentCallbackResult(request.orderNo(), false, unlocked.getStatus());
         }
@@ -112,12 +110,6 @@ public class PaymentCallbackService {
         }
 
         if (!amountIsCoherent(request, order)) {
-            // The channel moved money the platform cannot attribute to this order.
-            // Booking it anyway is how one cent settles a 6000-cent reservation, and
-            // how a refund grows past the payment it is refunding. So it stays off
-            // the books deliberately — which is the one case where the two ledgers
-            // are *supposed* to disagree, and reconciliation raises the ticket
-            // precisely because the channel has a transaction we do not.
             auditLogService.recordSystem("PAYMENT_CALLBACK_AMOUNT_REJECTED", "RESERVATION",
                     order.getReservationId(),
                     "渠道回调金额 " + request.amountCents() + " 分与订单不符（" + request.type()
@@ -145,15 +137,6 @@ public class PaymentCallbackService {
         return new PaymentCallbackResult(request.orderNo(), true, order.getStatus());
     }
 
-    /**
-     * Does this amount mean anything against this order?
-     *
-     * <p>The platform sells one thing per order and takes one payment for it, so
-     * the only coherent payment is the whole outstanding amount, and no refund can
-     * exceed what the channel is still holding. The exception is money that
-     * arrives after the window closed: it is refunded in full whatever it is, so
-     * no amount there can leave the books wrong.
-     */
     private boolean amountIsCoherent(PaymentCallbackRequest request, PaymentOrder order) {
         if (request.type() == PaymentTransactionType.REFUND) {
             return order.acceptsRefund(request.amountCents());
@@ -165,19 +148,12 @@ public class PaymentCallbackService {
     }
 
     /**
-     * The channel accepted a request and has now reported that it failed.
+     * Reopens only the exact channel-facing attempt that the FAILED outcome names.
      *
-     * <p>Not recording it as money is only half the answer. The outbound request
-     * was marked SENT when the channel took it, and SENT counts as settled, so
-     * without this the refund is never sent again — the reservation stays in
-     * REFUNDING for good while both ledgers hold only the original payment and
-     * therefore agree with each other.
-     *
-     * <p>The next attempt goes out under a fresh channel key. The intent key stays
-     * put, because it is what stops a retry from becoming a second payment; but
-     * the channel has given a final answer about the attempt presented under the
-     * old one, and asking again with it would be a no-op at any gateway that
-     * honours idempotency.
+     * <p>The stable intent key answers "what do we owe?" while channelKey answers
+     * "which attempt just got a final no?". Once attempt #0 is rejected and #1 is
+     * SENT, a duplicate or delayed rejection for #0 is stale. Reopening #1 from
+     * that old callback would mint #2 even though #1 may already have succeeded.
      */
     private void reopenRejectedRequest(PaymentCallbackRequest request) {
         PaymentRequest outbound = requestRepository
@@ -185,8 +161,16 @@ public class PaymentCallbackService {
                         request.orderNo(), request.type(), PaymentRequestStatus.SENT)
                 .orElse(null);
         if (outbound == null) {
-            // Nothing of ours was in flight — a payment the user made in the
-            // channel's own app, for instance. There is no intent to reopen.
+            return;
+        }
+        if (!outbound.channelKey().equals(request.idempotencyKey())) {
+            auditLogService.recordSystem("PAYMENT_CALLBACK_STALE_REJECTION", "PAYMENT_ORDER",
+                    null,
+                    "忽略旧渠道失败回调：订单 " + request.orderNo()
+                            + "，回调 attemptKey=" + request.idempotencyKey()
+                            + "，当前 attemptKey=" + outbound.channelKey());
+            log.info("Ignoring stale channel rejection orderNo={} callbackKey={} currentKey={}",
+                    request.orderNo(), request.idempotencyKey(), outbound.channelKey());
             return;
         }
         String reason = "渠道回调状态 " + request.status() + "，交易号 " + request.channelTxnId();
@@ -195,7 +179,6 @@ public class PaymentCallbackService {
                     outbound.getIdempotencyKey(), outbound.getChannelAttempt());
             eventPublisher.publishEvent(new PaymentRequestQueuedEvent(outbound.getIdempotencyKey()));
         } else {
-            // Out of attempts with real money still owed. Nothing automated is left.
             ticketService.raiseOutboundHaltedTicket(outbound, reason + "，重试预算已用尽");
         }
     }
@@ -219,8 +202,6 @@ public class PaymentCallbackService {
                     "支付成功 订单号 " + order.getOrderNo() + "，金额 " + request.amountCents() + " 分");
         } else {
             order.applyRefund(request.amountCents());
-            // A partial refund leaves a PAID reservation paid. Only a refund that
-            // clears the balance closes a cancellation that is waiting on it.
             if (reservation.getStatus() == ReservationStatus.REFUNDING && order.refundableCents() <= 0) {
                 reservation.completeRefund();
             }
@@ -229,17 +210,6 @@ public class PaymentCallbackService {
         }
     }
 
-    /**
-     * The money arrived after the payment window had already closed the
-     * reservation and given the slot back.
-     *
-     * <p>The reservation stays closed — someone else may hold that slot by now, and
-     * resurrecting it would double-book the equipment. But the payment is real, so
-     * it is recorded, the order moves to REFUND_DUE to say the platform is holding
-     * money it should not be, and a compensating refund is queued. Nothing here can
-     * be left to reconciliation: the channel collected and the ledger recorded, so
-     * both sides agree and the books look perfect while the user is out of pocket.
-     */
     private void applyLatePayment(PaymentCallbackRequest request, PaymentOrder order, Reservation reservation) {
         order.applyLatePayment(request.amountCents());
         dispatchService.enqueue(
