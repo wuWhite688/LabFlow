@@ -1,5 +1,6 @@
 package com.arthur.labops.payment;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -47,5 +48,30 @@ class PaymentCallbackTokenValidatorTest {
                         "labflow-callback-change-me-please!!"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("placeholder");
+    }
+
+    @Test
+    void presentedTokenMatchesExpectedUtf8Bytes() {
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken(
+                "labflow-callback-9f3c", "labflow-callback-9f3c")).isTrue();
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken(
+                "渠道口令-密钥", "渠道口令-密钥")).isTrue();
+    }
+
+    @Test
+    void presentedTokenRejectsMismatchNullAndEmpty() {
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken(
+                "labflow-callback-9f3c", "labflow-callback-9f3d")).isFalse();
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken(
+                "labflow-callback-9f3c", "labflow-callback-9f3")).isFalse();
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken(
+                "渠道口令-密钥", "渠道口令-密鑰")).isFalse();
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken(
+                "labflow-callback-9f3c", null)).isFalse();
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken(
+                null, "labflow-callback-9f3c")).isFalse();
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken(null, null)).isFalse();
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken("", null)).isFalse();
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken("", "")).isTrue();
     }
 }

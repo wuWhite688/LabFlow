@@ -1,6 +1,7 @@
 package com.arthur.labops.payment;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.Set;
 
@@ -49,6 +50,21 @@ public final class PaymentCallbackTokenValidator {
                             + "Set PAYMENT_CALLBACK_TOKEN in .env to a unique random token "
                             + "(do not use the simulated-channel default or .env.example values).");
         }
+    }
+
+    /**
+     * Constant-time compare of the configured token and the header value.
+     * {@code String.equals} leaks prefix length; {@link MessageDigest#isEqual}
+     * does not. Null on either side is a miss — {@code getBytes} would NPE, and
+     * a missing {@code X-Channel-Token} must not match an empty configured token.
+     */
+    public static boolean matchesPresentedToken(String expected, String presented) {
+        if (expected == null || presented == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                presented.getBytes(StandardCharsets.UTF_8));
     }
 
     static boolean isPlaceholder(String token) {

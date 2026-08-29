@@ -39,7 +39,7 @@ public class PaymentController {
     @PostMapping("/callback")
     PaymentCallbackResult callback(@RequestHeader(name = CALLBACK_TOKEN_HEADER, required = false) String token,
                                    @Valid @RequestBody PaymentCallbackRequest request) {
-        if (!properties.getCallbackToken().equals(token)) {
+        if (!PaymentCallbackTokenValidator.matchesPresentedToken(properties.getCallbackToken(), token)) {
             throw new BusinessException("PAYMENT_CALLBACK_UNAUTHORIZED", "渠道回调校验失败", HttpStatus.UNAUTHORIZED);
         }
         return callbackIngest.ingest(request);
