@@ -24,9 +24,11 @@ import com.arthur.labops.payment.channel.SimulatedChannelProperties.CallbackMode
  *
  * <p>Everything that would be non-deterministic in a real integration is a
  * parameter here — callback timing ({@link CallbackMode}), duplicate delivery
- * ({@link #redeliverAll()}), and lost delivery ({@link #discardPending()}) — so a
- * scenario can be replayed byte-for-byte. Channel transaction ids are a
- * monotonic sequence rather than random for the same reason.
+ * ({@link #redeliverAll()}), lost delivery ({@link #discardPending()}), transport
+ * failure ({@link #failNextOutbound(int)}) and a terminal channel rejection
+ * ({@link #rejectNextOutboundFinal(int)}). The last two are deliberately
+ * different: a transport exception leaves the outcome unknown, while a terminal
+ * rejection says with certainty that no money moved.
  *
  * <p>The ledger lives in memory. That is a deliberate limit of the simulator:
  * it models "the channel remembers what we do not", which is all reconciliation
@@ -44,8 +46,11 @@ public class SimulatedPaymentChannel {
     private final AtomicLong sequence = new AtomicLong();
     private final java.util.concurrent.atomic.AtomicInteger failNextOutbound =
             new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger rejectNextOutboundFinal =
+            new java.util.concurrent.atomic.AtomicInteger();
     private final List<ChannelEntry> ledger = new ArrayList<>();
     private final java.util.Map<String, ChannelEntry> byMerchantKey = new java.util.HashMap<>();
+    private final java.util.Map<String, ChannelCallback> rejectedByMerchantKey = new java.util.HashMap<>();
     private final Deque<ChannelCallback> pending = new ArrayDeque<>();
     private final List<ChannelCallback> delivered = new ArrayList<>();
 
@@ -73,12 +78,7 @@ public class SimulatedPaymentChannel {
     /**
      * Charge under a merchant idempotency key. Presenting the same key again
      * returns the transaction already created for it instead of creating a
-     * second one — which is what a real gateway does, and the only thing that can
-     * stop a duplicate <em>initiation</em> from taking the money twice.
-     *
-     * <p>Callback idempotency cannot cover this case: two separate charges have
-     * two separate transaction ids, so nothing downstream can tell they were
-     * meant to be one payment.
+     * second one.
      */
     public ChannelEntry charge(String orderNo, long amountCents, String merchantIdempotencyKey) {
         return record(orderNo, ChannelEntryType.PAYMENT, amountCents, merchantIdempotencyKey);
@@ -89,13 +89,21 @@ public class SimulatedPaymentChannel {
     }
 
     /**
-     * Test seam: make the next {@code count} outbound calls fail, the way a real
-     * gateway does under a timeout or a 5xx. Belongs with {@link #discardPending()}
-     * and {@link #redeliverAll()} — the simulator's whole job is to make the
-     * failure modes of a real integration reproducible on demand.
+     * Test seam for an unknown outcome: the call throws before the platform knows
+     * whether the channel accepted it. Retrying must therefore use the same key.
      */
     public void failNextOutbound(int count) {
         failNextOutbound.set(count);
+    }
+
+    /**
+     * Test seam for a known terminal outcome. The channel sends a FAILED callback
+     * for the attempt but writes no money entry. Retrying the intent is allowed,
+     * but only under a fresh channel-facing key because this key has received a
+     * final answer.
+     */
+    public void rejectNextOutboundFinal(int count) {
+        rejectNextOutboundFinal.set(count);
     }
 
     private ChannelEntry record(String orderNo, ChannelEntryType type, long amountCents,
@@ -103,47 +111,70 @@ public class SimulatedPaymentChannel {
         if (amountCents <= 0) {
             throw new IllegalArgumentException("渠道交易金额必须为正数");
         }
-        if (merchantIdempotencyKey != null) {
-            synchronized (this) {
+
+        ChannelEntry entry = null;
+        ChannelCallback callback = null;
+        boolean terminalRejection = false;
+
+        synchronized (this) {
+            if (merchantIdempotencyKey != null) {
                 ChannelEntry existing = byMerchantKey.get(merchantIdempotencyKey);
                 if (existing != null) {
-                    // Same intent presented twice. Return the original transaction and
-                    // fire no second callback: from the channel's side nothing new
-                    // happened, which is precisely the guarantee being bought here.
                     log.info("Simulated channel returning existing transaction for merchant key={} channelTxnId={}",
                             merchantIdempotencyKey, existing.channelTxnId());
                     return existing;
                 }
+                if (rejectedByMerchantKey.containsKey(merchantIdempotencyKey)) {
+                    log.info("Simulated channel returning existing terminal rejection for merchant key={}",
+                            merchantIdempotencyKey);
+                    return null;
+                }
             }
-        }
-        if (failNextOutbound.getAndUpdate(remaining -> Math.max(0, remaining - 1)) > 0) {
-            log.warn("Simulated channel rejecting outbound {} orderNo={} (injected failure)", type, orderNo);
-            throw new IllegalStateException("渠道暂时不可用（注入的故障）");
-        }
-        ChannelEntry entry;
-        ChannelCallback callback;
-        synchronized (this) {
+
+            if (failNextOutbound.getAndUpdate(remaining -> Math.max(0, remaining - 1)) > 0) {
+                log.warn("Simulated channel transport failure {} orderNo={} (injected)", type, orderNo);
+                throw new IllegalStateException("渠道暂时不可用（注入的故障）");
+            }
+
             String channelTxnId = "CH-" + type.name().charAt(0) + "-" + sequence.incrementAndGet();
-            entry = new ChannelEntry(
-                    channelTxnId, orderNo, type, amountCents, ChannelEntry.STATUS_SUCCESS, Instant.now());
-            ledger.add(entry);
-            if (merchantIdempotencyKey != null) {
-                byMerchantKey.put(merchantIdempotencyKey, entry);
+            Instant now = Instant.now();
+
+            if (rejectNextOutboundFinal.getAndUpdate(remaining -> Math.max(0, remaining - 1)) > 0) {
+                terminalRejection = true;
+                callback = ChannelCallback.rejected(
+                        orderNo, type, amountCents, merchantIdempotencyKey, channelTxnId, now);
+                if (merchantIdempotencyKey != null) {
+                    rejectedByMerchantKey.put(merchantIdempotencyKey, callback);
+                }
+            } else {
+                entry = new ChannelEntry(
+                        channelTxnId, orderNo, type, amountCents, ChannelEntry.STATUS_SUCCESS, now);
+                ledger.add(entry);
+                if (merchantIdempotencyKey != null) {
+                    byMerchantKey.put(merchantIdempotencyKey, entry);
+                }
+                callback = ChannelCallback.of(entry, merchantIdempotencyKey);
             }
-            callback = ChannelCallback.of(entry);
+
             if (properties.getCallbackMode() != CallbackMode.IMMEDIATE) {
                 pending.addLast(callback);
             }
         }
-        log.info("Simulated channel recorded {} orderNo={} amountCents={} channelTxnId={}",
-                type, orderNo, amountCents, entry.channelTxnId());
+
+        if (terminalRejection) {
+            log.info("Simulated channel terminally rejected {} orderNo={} amountCents={} channelTxnId={}",
+                    type, orderNo, amountCents, callback.channelTxnId());
+        } else {
+            log.info("Simulated channel recorded {} orderNo={} amountCents={} channelTxnId={}",
+                    type, orderNo, amountCents, entry.channelTxnId());
+        }
 
         switch (properties.getCallbackMode()) {
             case IMMEDIATE -> dispatch(callback);
             case DELAYED -> taskScheduler.schedule(
                     this::deliverPending, Instant.now().plus(properties.getCallbackDelay()));
-            case MANUAL -> log.info("Simulated channel holding callback channelTxnId={} (MANUAL mode)",
-                    entry.channelTxnId());
+            case MANUAL -> log.info("Simulated channel holding callback channelTxnId={} status={} (MANUAL mode)",
+                    callback.channelTxnId(), callback.status());
         }
         return entry;
     }
@@ -157,8 +188,7 @@ public class SimulatedPaymentChannel {
 
     /**
      * Replays every callback the channel has already delivered. This is what a
-     * real gateway does when it does not see a timely acknowledgement, and it is
-     * the reason the local side needs an idempotency key rather than good luck.
+     * real gateway does when it does not see a timely acknowledgement.
      */
     public int redeliverAll() {
         List<ChannelCallback> replay;
@@ -170,16 +200,14 @@ public class SimulatedPaymentChannel {
     }
 
     /**
-     * Throws away callbacks the channel has queued but not delivered, modelling a
-     * delivery that never lands (or a local write that failed and was never
-     * retried). The channel ledger keeps the transaction — which is exactly the
-     * asymmetry reconciliation exists to catch.
+     * Throws away callbacks the channel has queued but not delivered. Successful
+     * money movements stay in the channel ledger; terminal rejections never had a
+     * money row to begin with.
      */
     public int discardPending() {
         List<ChannelCallback> dropped = drainPending();
         if (!dropped.isEmpty()) {
-            log.warn("Simulated channel discarded {} undelivered callback(s); channel ledger keeps them",
-                    dropped.size());
+            log.warn("Simulated channel discarded {} undelivered callback(s)", dropped.size());
         }
         return dropped.size();
     }
@@ -198,7 +226,8 @@ public class SimulatedPaymentChannel {
             callbackSink.deliver(callback);
         } catch (RuntimeException exception) {
             // A real gateway does not roll its own books back because our endpoint
-            // blew up. Keep the ledger entry and let reconciliation find the gap.
+            // blew up. If money moved, reconciliation finds the gap; if this was a
+            // rejection, a later redelivery carries the same attempt identity.
             log.warn("Simulated channel callback delivery failed channelTxnId={} orderNo={}",
                     callback.channelTxnId(), callback.orderNo(), exception);
         }
@@ -216,10 +245,7 @@ public class SimulatedPaymentChannel {
                 .toList();
     }
 
-    /**
-     * Writes the T+1 settlement file for {@code settlementDate}. Day boundaries are
-     * UTC so a bill is reproducible regardless of where the process runs.
-     */
+    /** Writes the T+1 settlement file for {@code settlementDate}. */
     public Path writeDailyBill(LocalDate settlementDate) {
         Path target = billPath(settlementDate);
         ChannelBillFile.write(target, entriesFor(settlementDate));
@@ -231,20 +257,14 @@ public class SimulatedPaymentChannel {
         return Path.of(properties.getBillDirectory(), "channel-bill-" + settlementDate + ".csv");
     }
 
-    /**
-     * Test seam: forget this channel's books. Never called by application code.
-     *
-     * <p>The transaction sequence deliberately keeps counting. A real gateway
-     * never reissues a transaction id, and rewinding it here would hand a fresh
-     * scenario an id the local ledger already holds from an earlier one — which
-     * the idempotency check would then correctly, and very confusingly, treat as
-     * a replay.
-     */
+    /** Test seam: forget this channel's books. Never called by application code. */
     public synchronized void reset() {
         ledger.clear();
         byMerchantKey.clear();
+        rejectedByMerchantKey.clear();
         pending.clear();
         delivered.clear();
         failNextOutbound.set(0);
+        rejectNextOutboundFinal.set(0);
     }
 }
