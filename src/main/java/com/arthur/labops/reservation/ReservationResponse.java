@@ -12,7 +12,8 @@ public record ReservationResponse(
         Instant endTime,
         ReservationStatus status,
         Instant createdAt,
-        Instant expiresAt
+        Instant expiresAt,
+        Instant paymentDeadline
 ) {
     static ReservationResponse from(Reservation reservation) {
         return new ReservationResponse(
@@ -25,6 +26,7 @@ public record ReservationResponse(
                 reservation.getEndTime(),
                 reservation.getStatus(),
                 reservation.getCreatedAt(),
-                reservation.getExpiresAt());
+                reservation.getExpiresAt(),
+                reservation.getPaymentDeadline());
     }
 }

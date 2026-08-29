@@ -1,0 +1,13 @@
+-- Separates "which intent" from "which attempt at the channel".
+--
+-- The idempotency key names the intent and must stay stable, because that is
+-- what stops a retry from becoming a second payment. But once the channel has
+-- made a final decision about the attempt presented under a key, presenting the
+-- same key again is a guaranteed no-op at any gateway that honours idempotency —
+-- so a refund the channel rejected could never be sent again, and the
+-- reservation stayed in REFUNDING with the money still at the channel.
+--
+-- The counter only moves when the channel itself reports failure. A local send
+-- failure leaves it alone on purpose: we do not know whether the channel
+-- received that one, so it has to be retried under the same key.
+alter table payment_requests add column channel_attempt int not null default 0;

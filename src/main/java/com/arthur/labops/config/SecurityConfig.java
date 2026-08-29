@@ -45,6 +45,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/api/reservations/*/complete").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/reservations/*/cancel").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/reservations/**").authenticated()
+                        // The channel has no platform account; the endpoint verifies a
+                        // shared token itself, standing in for signature verification.
+                        .requestMatchers(HttpMethod.POST, "/api/payments/callback").permitAll()
+                        .requestMatchers("/api/payments/**").authenticated()
+                        .requestMatchers("/api/reconciliation/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/work-orders").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/work-orders/**").hasAnyRole("TECHNICIAN", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/work-orders/**").authenticated()

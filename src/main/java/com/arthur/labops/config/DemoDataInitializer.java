@@ -77,6 +77,12 @@ public class DemoDataInitializer implements ApplicationRunner {
                 equipment("AUTO-009", "全自动生化分析仪", "生命科学", "生科楼 C118", "Mindray", "BS-430", "梁老师", LocalDate.of(2024, 2, 21), "面向批量生化指标检测与教学实验")
         ));
 
+        // Two priced seeds so the demo has both branches of approval: the free
+        // equipment goes straight to APPROVED, the priced ones stop at
+        // AWAITING_PAYMENT with an order open.
+        equipment.get(0).setHourlyPriceCents(12_000L);
+        equipment.get(2).setHourlyPriceCents(8_000L);
+
         ZoneId zone = ZoneId.systemDefault();
         LocalDate today = LocalDate.now(zone);
         // 按本地时区生成自然错开的整点/半点

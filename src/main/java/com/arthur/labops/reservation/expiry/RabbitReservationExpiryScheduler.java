@@ -7,6 +7,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -14,7 +15,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * Schedules reservation expiry via <strong>per-message delay queues</strong> with
+ * Schedules reservation deadlines via <strong>per-message delay queues</strong> with
  * queue-level TTL + dead-letter to the shared expiry work queue.
  *
  * <p>This intentionally replaces the previous design (single FIFO delay queue +
@@ -43,10 +44,10 @@ public class RabbitReservationExpiryScheduler implements ReservationExpirySchedu
     }
 
     @Override
-    public void schedule(Long reservationId, Instant expiresAt) {
-        long delayMillis = Math.max(1L, Duration.between(Instant.now(), expiresAt).toMillis());
-        long expiresAtEpochMs = expiresAt.toEpochMilli();
-        String delayQueue = topology.delayQueueName(reservationId, expiresAtEpochMs);
+    public void schedule(ReservationDeadlineKind kind, Long reservationId, Instant deadline) {
+        long delayMillis = Math.max(1L, Duration.between(Instant.now(), deadline).toMillis());
+        long deadlineEpochMs = deadline.toEpochMilli();
+        String delayQueue = topology.delayQueueName(kind, reservationId, deadlineEpochMs);
 
         Map<String, Object> args = new HashMap<>();
         // Queue-level TTL: every message in this private queue has the same delay.
@@ -60,14 +61,42 @@ public class RabbitReservationExpiryScheduler implements ReservationExpirySchedu
         amqpAdmin.declareQueue(queue);
 
         // Default exchange routes by queue name; message itself has no per-message TTL.
-        rabbitTemplate.convertAndSend("", delayQueue, reservationId.toString());
+        rabbitTemplate.convertAndSend("", delayQueue, ReservationDeadlinePayload.encode(kind, reservationId));
 
         log.info(
-                "RabbitMQ expiry scheduled reservationId={} delayMs={} expiresAt={} delayQueue={} dlx={} (per-queue TTL, no shared FIFO delay)",
+                "RabbitMQ deadline scheduled kind={} reservationId={} delayMs={} deadline={} delayQueue={} dlx={} (per-queue TTL, no shared FIFO delay)",
+                kind,
                 reservationId,
                 delayMillis,
-                expiresAt,
+                deadline,
                 delayQueue,
                 topology.getExpiryExchange());
+    }
+
+    /**
+     * Deletes the private delay queue, which takes the pending message with it.
+     *
+     * <p>{@code x-expires} already bounds how long an <em>empty</em> queue lingers,
+     * but it does not touch a queue that still holds an undelivered message: that
+     * one survives its full TTL and then dead-letters work everyone already knows
+     * is moot. Deleting on settle is what keeps the broker's queue count
+     * proportional to open reservations rather than to all reservations ever made.
+     */
+    @Override
+    public void cancel(ReservationDeadlineKind kind, Long reservationId, Instant deadline) {
+        if (deadline == null) {
+            return;
+        }
+        String delayQueue = topology.delayQueueName(kind, reservationId, deadline.toEpochMilli());
+        try {
+            boolean deleted = amqpAdmin.deleteQueue(delayQueue);
+            log.info("RabbitMQ deadline cancelled kind={} reservationId={} delayQueue={} deleted={}",
+                    kind, reservationId, delayQueue, deleted);
+        } catch (AmqpException exception) {
+            // Cleanup only. The state guard on the firing path already makes a
+            // surviving message harmless, so a broker hiccup here must not fail
+            // the business transaction that triggered it.
+            log.warn("Failed to delete delay queue {} for reservation {}", delayQueue, reservationId, exception);
+        }
     }
 }

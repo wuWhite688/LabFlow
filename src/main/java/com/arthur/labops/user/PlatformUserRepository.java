@@ -20,5 +20,7 @@ public interface PlatformUserRepository extends JpaRepository<PlatformUser, Long
 
     boolean existsByUsername(String username);
 
+    long countByUsernameNot(String username);
+
     List<PlatformUser> findByRoleAndEnabledTrueOrderByDisplayName(UserRole role);
 }

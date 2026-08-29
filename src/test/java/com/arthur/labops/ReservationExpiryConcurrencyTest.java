@@ -38,6 +38,7 @@ import com.arthur.labops.reservation.ReservationRepository;
 import com.arthur.labops.reservation.ReservationStatus;
 import com.arthur.labops.reservation.expiry.RabbitExpiryTopologyProperties;
 import com.arthur.labops.reservation.expiry.RabbitReservationExpiryListener;
+import com.arthur.labops.reservation.expiry.ReservationDeadlineHandler;
 import com.arthur.labops.reservation.expiry.ReservationExpirationService;
 import com.arthur.labops.reservation.expiry.ReservationExpiryCompensationJob;
 import com.arthur.labops.user.PlatformUser;
@@ -82,6 +83,9 @@ class ReservationExpiryConcurrencyTest {
 
     @Autowired
     private ReservationExpirationService expirationService;
+
+    @Autowired
+    private ReservationDeadlineHandler deadlineHandler;
 
     @Autowired
     private ReservationExpiryCompensationJob compensationJob;
@@ -150,7 +154,7 @@ class ReservationExpiryConcurrencyTest {
         Reservation overdue = overduePending("listener-dup");
         long auditsBefore = expiryAudits(overdue.getId());
         RabbitReservationExpiryListener listener = new RabbitReservationExpiryListener(
-                expirationService, new RabbitExpiryTopologyProperties());
+                deadlineHandler, new RabbitExpiryTopologyProperties());
 
         listener.expire(String.valueOf(overdue.getId()));
         listener.expire(String.valueOf(overdue.getId()));

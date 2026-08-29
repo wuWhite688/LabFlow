@@ -14,7 +14,17 @@ import jakarta.persistence.LockModeType;
 public interface FaultWorkOrderRepository
         extends JpaRepository<FaultWorkOrder, Long>, JpaSpecificationExecutor<FaultWorkOrder> {
 
-    boolean existsByEquipmentIdAndStatusIn(Long equipmentId, Collection<WorkOrderStatus> statuses);
+    /**
+     * "Is a real fault already open on this equipment?" — the guard that stops
+     * duplicate fault reports. Reconciliation tickets live in the same table but
+     * must not block someone from reporting that the machine is broken.
+     */
+    boolean existsByEquipmentIdAndCategoryAndStatusIn(
+            Long equipmentId, WorkOrderCategory category, Collection<WorkOrderStatus> statuses);
+
+    boolean existsByDiscrepancyKey(String discrepancyKey);
+
+    long countByCategoryAndStatusIn(WorkOrderCategory category, Collection<WorkOrderStatus> statuses);
 
     /**
      * Only work orders that actually hold the equipment offline may drive it to

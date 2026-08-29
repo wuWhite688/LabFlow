@@ -12,36 +12,24 @@ public class RabbitReservationExpiryListener {
 
     private static final Logger log = LoggerFactory.getLogger(RabbitReservationExpiryListener.class);
 
-    private final ReservationExpirationService expirationService;
+    private final ReservationDeadlineHandler deadlineHandler;
     private final RabbitExpiryTopologyProperties topology;
 
-    public RabbitReservationExpiryListener(ReservationExpirationService expirationService,
+    public RabbitReservationExpiryListener(ReservationDeadlineHandler deadlineHandler,
                                            RabbitExpiryTopologyProperties topology) {
-        this.expirationService = expirationService;
+        this.deadlineHandler = deadlineHandler;
         this.topology = topology;
     }
 
     @RabbitListener(queues = "#{@reservationExpiryQueue.name}")
-    public void expire(String reservationId) {
-        Long id = parseReservationId(reservationId);
-        if (id == null) {
-            log.warn("Ignoring non-numeric RabbitMQ expiry payload queue={}", topology.getExpiryQueue());
+    public void expire(String payload) {
+        ReservationDeadlinePayload.Decoded decoded = ReservationDeadlinePayload.decode(payload);
+        if (decoded == null) {
+            log.warn("Ignoring unparseable RabbitMQ deadline payload queue={}", topology.getExpiryQueue());
             return;
         }
-        log.info("RabbitMQ expiry message consumed reservationId={} queue={}",
-                id, topology.getExpiryQueue());
-        boolean expired = expirationService.expireIfPending(id);
-        log.info("RabbitMQ expiry processed reservationId={} expired={}", id, expired);
-    }
-
-    private static Long parseReservationId(String reservationId) {
-        if (reservationId == null || reservationId.isBlank()) {
-            return null;
-        }
-        try {
-            return Long.valueOf(reservationId.trim());
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
+        log.info("RabbitMQ deadline message consumed kind={} reservationId={} queue={}",
+                decoded.kind(), decoded.reservationId(), topology.getExpiryQueue());
+        deadlineHandler.fire(decoded.kind(), decoded.reservationId());
     }
 }

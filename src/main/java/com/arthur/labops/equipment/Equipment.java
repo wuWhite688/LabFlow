@@ -17,6 +17,9 @@ import jakarta.persistence.Version;
 @Table(name = "equipment")
 public class Equipment {
 
+    /** Ceiling so the billing multiplication cannot overflow: 1,000,000.00 per hour. */
+    public static final long MAX_HOURLY_PRICE_CENTS = 100_000_000L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -51,6 +54,13 @@ public class Equipment {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private EquipmentStatus status;
+
+    /**
+     * Reservation price per hour, in cents. Zero means free, and a free
+     * reservation never enters the payment flow at all.
+     */
+    @Column(name = "hourly_price_cents", nullable = false)
+    private long hourlyPriceCents;
 
     @Version
     private long version;
@@ -96,6 +106,18 @@ public class Equipment {
     public LocalDate getPurchaseDate() { return purchaseDate; }
     public String getDescription() { return description; }
     public EquipmentStatus getStatus() { return status; }
+    public long getHourlyPriceCents() { return hourlyPriceCents; }
+
+    public void setHourlyPriceCents(long hourlyPriceCents) {
+        if (hourlyPriceCents < 0) {
+            throw new IllegalArgumentException("设备价格不能为负数");
+        }
+        if (hourlyPriceCents > MAX_HOURLY_PRICE_CENTS) {
+            throw new IllegalArgumentException("设备价格超出上限");
+        }
+        this.hourlyPriceCents = hourlyPriceCents;
+        this.updatedAt = Instant.now();
+    }
 
     public void markMaintenance() {
         if (status == EquipmentStatus.RETIRED) {

@@ -20,8 +20,11 @@ import com.arthur.labops.equipment.EquipmentStatus;
 import com.arthur.labops.equipment.EquipmentStatusService;
 import com.arthur.labops.audit.AuditLogService;
 import com.arthur.labops.reservation.Reservation;
+import com.arthur.labops.reservation.ReservationClosure;
+import com.arthur.labops.reservation.ReservationClosureService;
 import com.arthur.labops.reservation.ReservationRepository;
 import com.arthur.labops.reservation.ReservationStatus;
+import com.arthur.labops.reservation.ReservationStatuses;
 import com.arthur.labops.user.CurrentUserService;
 import com.arthur.labops.user.PlatformUser;
 import com.arthur.labops.user.PlatformUserRepository;
@@ -36,14 +39,30 @@ public class WorkOrderService {
             WorkOrderStatus.IN_PROGRESS,
             WorkOrderStatus.RESOLVED);
 
-    private static final Set<ReservationStatus> OPEN_RESERVATIONS = EnumSet.of(
-            ReservationStatus.PENDING,
-            ReservationStatus.APPROVED);
+    /**
+     * Every reservation a fault report has to deal with, money included. Taking
+     * equipment offline must not skip a paid reservation — that would leave the
+     * user without the equipment and without their money.
+     */
+    private static final Set<ReservationStatus> OPEN_RESERVATIONS = ReservationStatuses.OPEN;
 
     private static final Map<WorkOrderStatus, Set<WorkOrderStatus>> ALLOWED_TRANSITIONS = Map.of(
             WorkOrderStatus.SUBMITTED, EnumSet.of(WorkOrderStatus.ASSIGNED, WorkOrderStatus.CANCELLED),
             WorkOrderStatus.ASSIGNED, EnumSet.of(WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.CANCELLED),
             WorkOrderStatus.IN_PROGRESS, EnumSet.of(WorkOrderStatus.RESOLVED),
+            WorkOrderStatus.RESOLVED, EnumSet.of(WorkOrderStatus.CLOSED, WorkOrderStatus.IN_PROGRESS),
+            WorkOrderStatus.CLOSED, EnumSet.noneOf(WorkOrderStatus.class),
+            WorkOrderStatus.CANCELLED, EnumSet.noneOf(WorkOrderStatus.class));
+
+    /**
+     * Accounting discrepancies share the table, not the repair workflow. They are
+     * admin-only and never get an equipment technician assignee, because assigning
+     * a normal repair ticket is also the operation that takes equipment offline.
+     */
+    private static final Map<WorkOrderStatus, Set<WorkOrderStatus>> PAYMENT_DISCREPANCY_TRANSITIONS = Map.of(
+            WorkOrderStatus.SUBMITTED, EnumSet.of(WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.CANCELLED),
+            WorkOrderStatus.ASSIGNED, EnumSet.noneOf(WorkOrderStatus.class),
+            WorkOrderStatus.IN_PROGRESS, EnumSet.of(WorkOrderStatus.RESOLVED, WorkOrderStatus.CANCELLED),
             WorkOrderStatus.RESOLVED, EnumSet.of(WorkOrderStatus.CLOSED, WorkOrderStatus.IN_PROGRESS),
             WorkOrderStatus.CLOSED, EnumSet.noneOf(WorkOrderStatus.class),
             WorkOrderStatus.CANCELLED, EnumSet.noneOf(WorkOrderStatus.class));
@@ -55,6 +74,7 @@ public class WorkOrderService {
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final EquipmentStatusService equipmentStatusService;
+    private final ReservationClosureService closureService;
 
     public WorkOrderService(EquipmentRepository equipmentRepository,
                             FaultWorkOrderRepository workOrderRepository,
@@ -62,7 +82,8 @@ public class WorkOrderService {
                             PlatformUserRepository userRepository,
                             CurrentUserService currentUserService,
                             AuditLogService auditLogService,
-                            EquipmentStatusService equipmentStatusService) {
+                            EquipmentStatusService equipmentStatusService,
+                            ReservationClosureService closureService) {
         this.equipmentRepository = equipmentRepository;
         this.workOrderRepository = workOrderRepository;
         this.reservationRepository = reservationRepository;
@@ -70,6 +91,7 @@ public class WorkOrderService {
         this.currentUserService = currentUserService;
         this.auditLogService = auditLogService;
         this.equipmentStatusService = equipmentStatusService;
+        this.closureService = closureService;
     }
 
     @Transactional
@@ -82,7 +104,8 @@ public class WorkOrderService {
             throw new BusinessException(
                     "EQUIPMENT_RETIRED", "已退役设备不能创建故障工单", HttpStatus.CONFLICT);
         }
-        if (workOrderRepository.existsByEquipmentIdAndStatusIn(equipment.getId(), ACTIVE_STATUSES)) {
+        if (workOrderRepository.existsByEquipmentIdAndCategoryAndStatusIn(
+                equipment.getId(), WorkOrderCategory.FAULT, ACTIVE_STATUSES)) {
             throw new BusinessException(
                     "ACTIVE_WORK_ORDER_EXISTS", "该设备已有未关闭的故障工单", HttpStatus.CONFLICT);
         }
@@ -113,7 +136,7 @@ public class WorkOrderService {
     }
 
     /**
-     * 维修员原子接单：仅能将 SUBMITTED 工单接给自己。
+     * 维修员原子接单：仅能将 SUBMITTED 故障工单接给自己。
      * 依赖悲观锁；并发下第二人得到 409。
      */
     @Transactional
@@ -134,6 +157,12 @@ public class WorkOrderService {
                 .orElseThrow(() -> new BusinessException(
                         "WORK_ORDER_NOT_FOUND", "故障工单不存在", HttpStatus.NOT_FOUND));
 
+        if (workOrder.getCategory() != WorkOrderCategory.FAULT) {
+            throw new BusinessException(
+                    "WORK_ORDER_CATEGORY_FORBIDDEN",
+                    "对账差异工单由管理员处理，不能进入维修员接单流程",
+                    HttpStatus.FORBIDDEN);
+        }
         if (workOrder.getStatus() != WorkOrderStatus.SUBMITTED) {
             throw new BusinessException(
                     "WORK_ORDER_ALREADY_CLAIMED",
@@ -157,6 +186,11 @@ public class WorkOrderService {
 
         WorkOrderStatus current = workOrder.getStatus();
         WorkOrderStatus target = request.targetStatus();
+
+        if (workOrder.getCategory() == WorkOrderCategory.PAYMENT_DISCREPANCY) {
+            return transitionPaymentDiscrepancy(actor, workOrder, current, target, request.assigneeId());
+        }
+
         if (!ALLOWED_TRANSITIONS.get(current).contains(target)) {
             throw new BusinessException(
                     "INVALID_WORK_ORDER_TRANSITION",
@@ -199,11 +233,15 @@ public class WorkOrderService {
             specification = specification.and((root, query, builder) ->
                     builder.equal(root.get("equipment").get("id"), equipmentId));
         }
+        if (actor.getRole() != UserRole.ADMIN) {
+            specification = specification.and((root, query, builder) ->
+                    builder.equal(root.get("category"), WorkOrderCategory.FAULT));
+        }
         if (actor.getRole() == UserRole.STUDENT) {
             specification = specification.and((root, query, builder) ->
                     builder.equal(root.get("reporterId"), actor.getId()));
         } else if (actor.getRole() == UserRole.TECHNICIAN) {
-            // 待接单池 + 已派给自己的工单
+            // 待接单池 + 已派给自己的故障工单。财务差账单不会进入维修流程。
             specification = specification.and((root, query, builder) -> builder.or(
                     builder.equal(root.get("status"), WorkOrderStatus.SUBMITTED),
                     builder.equal(root.get("assigneeId"), actor.getId())));
@@ -211,10 +249,40 @@ public class WorkOrderService {
         return workOrderRepository.findAll(specification, pageable).map(WorkOrderResponse::from);
     }
 
+    private WorkOrderResponse transitionPaymentDiscrepancy(PlatformUser actor,
+                                                            FaultWorkOrder workOrder,
+                                                            WorkOrderStatus current,
+                                                            WorkOrderStatus target,
+                                                            Long requestedAssigneeId) {
+        if (actor.getRole() != UserRole.ADMIN) {
+            throw new BusinessException(
+                    "WORK_ORDER_CATEGORY_FORBIDDEN",
+                    "对账差异工单仅由管理员处理",
+                    HttpStatus.FORBIDDEN);
+        }
+        if (requestedAssigneeId != null) {
+            throw new BusinessException(
+                    "PAYMENT_DISCREPANCY_ASSIGNEE_FORBIDDEN",
+                    "对账差异工单不进入维修员派单流程",
+                    HttpStatus.BAD_REQUEST);
+        }
+        if (!PAYMENT_DISCREPANCY_TRANSITIONS.get(current).contains(target)) {
+            throw new BusinessException(
+                    "INVALID_WORK_ORDER_TRANSITION",
+                    "对账差异工单不能从 " + current + " 流转到 " + target,
+                    HttpStatus.CONFLICT);
+        }
+
+        workOrder.transitionTo(target);
+        auditLogService.record(actor, "WORK_ORDER_" + target.name(), "WORK_ORDER", workOrder.getId(),
+                "对账差异工单从 " + current + " 流转到 " + target);
+        return WorkOrderResponse.from(workOrder);
+    }
+
     /**
      * 权限模型：
-     * - 管理员：可派给任意维修员、取消、处理任意工单
-     * - 维修员：可主动接单（claim）；派单接口只能指定自己；处理仅限自己的单；不可取消
+     * - 管理员：可派给任意维修员、取消、处理任意故障工单；对账差异走独立 admin-only 流程
+     * - 维修员：可主动接故障单（claim）；派单接口只能指定自己；处理仅限自己的故障单；不可取消
      */
     private void assertTransitionAuthorized(PlatformUser actor, FaultWorkOrder workOrder,
                                             WorkOrderStatus target, Long requestedAssigneeId) {
@@ -320,10 +388,17 @@ public class WorkOrderService {
             if (onlyRequesterId != null && !onlyRequesterId.equals(reservation.getRequesterId())) {
                 continue;
             }
-            reservation.cancel();
+            // Same transition the owner's own cancel goes through, so a paid
+            // reservation refunds here too instead of being closed on the quiet.
+            ReservationClosure closure = closureService.close(reservation);
+            if (closure == ReservationClosure.NOT_CLOSEABLE) {
+                continue;
+            }
             cancelled += 1;
             auditLogService.record(actor, "RESERVATION_CANCELLED", "RESERVATION", reservation.getId(),
-                    "设备报修联动取消预约");
+                    closure == ReservationClosure.REFUND_PENDING
+                            ? "设备报修联动取消预约，退款处理中"
+                            : "设备报修联动取消预约");
         }
         return cancelled;
     }
