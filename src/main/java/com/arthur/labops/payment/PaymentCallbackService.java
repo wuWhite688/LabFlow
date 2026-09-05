@@ -25,7 +25,8 @@ import com.arthur.labops.reservation.expiry.ReservationDeadlineKind;
  *
  * <p>Lock order throughout this class is equipment → reservation → payment_order
  * → payment_request. Nothing below may take a lock earlier in that sequence than
- * one it already holds.
+ * one it already holds, and nothing below may hand work that needs one of those
+ * rows to a separate transaction.
  */
 @Service
 public class PaymentCallbackService {
@@ -145,6 +146,10 @@ public class PaymentCallbackService {
      * settle the request in between, and this transaction would reopen a request it
      * had already decided about on stale values. Locking in id order keeps two
      * callbacks on the same order from deadlocking against each other.
+     *
+     * <p>The exhausted-budget ticket is written in this transaction rather than a
+     * nested one: this transaction holds the equipment row exclusively, and the
+     * work-order insert needs that same row for its foreign-key check.
      */
     private void reopenRejectedRequest(PaymentCallbackRequest request) {
         PaymentRequest outbound = requestRepository.findByOrderNoForUpdateOrderByIdAsc(request.orderNo()).stream()
@@ -164,7 +169,7 @@ public class PaymentCallbackService {
                     outbound.getIdempotencyKey(), outbound.getChannelAttempt());
             eventPublisher.publishEvent(new PaymentRequestQueuedEvent(outbound.getIdempotencyKey()));
         } else if (outbound.getStatus() == PaymentRequestStatus.ABANDONED) {
-            ticketService.raiseOutboundHaltedTicket(outbound, reason + "，重试预算已用尽");
+            ticketService.raiseOutboundHaltedTicketInCurrentTransaction(outbound, reason + "，重试预算已用尽");
         }
     }
 
