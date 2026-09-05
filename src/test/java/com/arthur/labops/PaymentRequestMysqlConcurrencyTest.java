@@ -252,7 +252,7 @@ class PaymentRequestMysqlConcurrencyTest {
     void synchronousRejectionReturnsAndFreshAttemptSucceeds() throws Exception {
         channel.rejectNextOutboundFinal(1);
         done(executor.submit(() -> dispatch.attempt(key)));
-        assertReopened();
+        assertReopened("CH-P-");
         dispatch.attempt(key);
         assertThat(current().getChannelAttempt()).isEqualTo(1);
         assertThat(current().getStatus()).isEqualTo(PaymentRequestStatus.SENT);
@@ -314,12 +314,16 @@ class PaymentRequestMysqlConcurrencyTest {
     private PaymentRequest current() { return requests.findByIdempotencyKey(key).orElseThrow(); }
 
     private void assertReopened() {
+        assertReopened("REJECT-" + orderNo);
+    }
+
+    private void assertReopened(String channelTransactionPrefix) {
         PaymentRequest result = current();
         assertThat(result.getChannelAttempt()).isEqualTo(1);
         assertThat(result.channelKey()).isEqualTo(key + "#1");
         assertThat(result.getStatus()).isEqualTo(PaymentRequestStatus.FAILED);
         assertThat(result.getAttempts()).isEqualTo(1);
-        assertThat(result.getLastError()).contains("REJECT-" + orderNo);
+        assertThat(result.getLastError()).startsWith("渠道回调状态 FAILED，交易号 " + channelTransactionPrefix);
         assertThat(result.getNextAttemptAt()).isBeforeOrEqualTo(Instant.now());
         assertThat(requests.findDueKeys(Instant.now())).contains(key);
     }
