@@ -20,7 +20,13 @@ import com.arthur.labops.reservation.ReservationStatus;
 import com.arthur.labops.reservation.expiry.ReservationDeadlineEvent;
 import com.arthur.labops.reservation.expiry.ReservationDeadlineKind;
 
-/** Applies one channel callback, exactly once where money moved. */
+/**
+ * Applies one channel callback, exactly once where money moved.
+ *
+ * <p>Lock order throughout this class is equipment → reservation → payment_order
+ * → payment_request. Nothing below may take a lock earlier in that sequence than
+ * one it already holds.
+ */
 @Service
 public class PaymentCallbackService {
 
@@ -133,9 +139,15 @@ public class PaymentCallbackService {
      * callbacks, and a late definitive answer after a transport failure left the
      * request FAILED. Once the first rejection advances #0 to #1, any duplicate or
      * delayed #0 rejection no longer matches and is a no-op.
+     *
+     * <p>The candidates are locked before they are filtered, not after. Picking a
+     * row on an unlocked read and only then locking it would let a completion write
+     * settle the request in between, and this transaction would reopen a request it
+     * had already decided about on stale values. Locking in id order keeps two
+     * callbacks on the same order from deadlocking against each other.
      */
     private void reopenRejectedRequest(PaymentCallbackRequest request) {
-        PaymentRequest outbound = requestRepository.findByOrderNoOrderByIdAsc(request.orderNo()).stream()
+        PaymentRequest outbound = requestRepository.findByOrderNoForUpdateOrderByIdAsc(request.orderNo()).stream()
                 .filter(candidate -> candidate.getType() == request.type())
                 .filter(candidate -> candidate.matchesChannelKey(request.idempotencyKey()))
                 .findFirst()
