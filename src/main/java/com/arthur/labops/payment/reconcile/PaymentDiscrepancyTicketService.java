@@ -115,9 +115,40 @@ public class PaymentDiscrepancyTicketService {
      * platform is not entitled to guess whether an operator's out-of-band refund
      * was meant to replace the one it queued. Both share the request's own key, so
      * an intent that stalls twice still produces one ticket.
+     *
+     * <p>Runs in its own transaction, so the caller must not already hold a lock on
+     * the ticket's equipment row. Callers that do — the callback path locks
+     * equipment first — must use
+     * {@link #raiseOutboundHaltedTicketInCurrentTransaction} instead.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean raiseOutboundHaltedTicket(com.arthur.labops.payment.PaymentRequest request, String reason) {
+        return writeOutboundHaltedTicket(request, reason);
+    }
+
+    /**
+     * The same ticket, written inside the caller's transaction.
+     *
+     * <p>Inserting a work order makes InnoDB take a shared lock on the referenced
+     * {@code equipment} row to check {@code fk_work_order_equipment}. A caller that
+     * already holds an exclusive lock on that row — {@code PaymentCallbackService}
+     * takes one before anything else — would block its own nested transaction,
+     * which can only finish once the outer one commits. That is a self-deadlock,
+     * and it resolves only when the lock wait times out.
+     *
+     * <p>Joining the caller's transaction avoids it: the lock is already held by
+     * this very transaction, so the foreign-key check is satisfied immediately. The
+     * cost is that a failure here now rolls the caller back, which on the callback
+     * path is what we want anyway — a rejection that produced neither a ticket nor
+     * a reopened request should not be recorded as handled.
+     */
+    @Transactional(propagation = Propagation.REQUIRED)
+    public boolean raiseOutboundHaltedTicketInCurrentTransaction(
+            com.arthur.labops.payment.PaymentRequest request, String reason) {
+        return writeOutboundHaltedTicket(request, reason);
+    }
+
+    private boolean writeOutboundHaltedTicket(com.arthur.labops.payment.PaymentRequest request, String reason) {
         String key = "outbound|" + request.getIdempotencyKey();
         if (workOrderRepository.existsByDiscrepancyKey(key)) {
             return false;

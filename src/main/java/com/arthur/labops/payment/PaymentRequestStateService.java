@@ -11,6 +11,12 @@ import org.springframework.transaction.annotation.Transactional;
  * conditional on the channel key that was actually sent: a synchronous callback
  * can reject attempt #0 and advance the request to #1 before the #0 call returns,
  * and #0 must not then overwrite that newer state as SENT or FAILED.
+ *
+ * <p>That condition is only meaningful under a row lock. A plain read keeps its
+ * REPEATABLE READ snapshot, so the key check would pass against a channel attempt
+ * another transaction has already advanced, and the full-row UPDATE Hibernate
+ * emits would put the old {@code channel_attempt} back — settling the request as
+ * SENT and taking it out of the retry scan for good.
  */
 @Service
 public class PaymentRequestStateService {
@@ -23,7 +29,7 @@ public class PaymentRequestStateService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean markSent(String idempotencyKey, String expectedChannelKey) {
-        PaymentRequest request = requestRepository.findByIdempotencyKey(idempotencyKey).orElse(null);
+        PaymentRequest request = requestRepository.findByIdempotencyKeyForUpdate(idempotencyKey).orElse(null);
         if (request == null || request.isSettled() || !request.matchesChannelKey(expectedChannelKey)) {
             return false;
         }
@@ -34,7 +40,7 @@ public class PaymentRequestStateService {
     /** @return true when the intent was still pending and has now been dropped */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean markObsolete(String idempotencyKey) {
-        return requestRepository.findByIdempotencyKey(idempotencyKey)
+        return requestRepository.findByIdempotencyKeyForUpdate(idempotencyKey)
                 .map(PaymentRequest::markObsolete)
                 .orElse(false);
     }
@@ -42,7 +48,7 @@ public class PaymentRequestStateService {
     /** @return the request if this failure exhausted its retry budget, otherwise null */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public PaymentRequest markFailed(String idempotencyKey, String expectedChannelKey, String error) {
-        PaymentRequest request = requestRepository.findByIdempotencyKey(idempotencyKey).orElse(null);
+        PaymentRequest request = requestRepository.findByIdempotencyKeyForUpdate(idempotencyKey).orElse(null);
         if (request == null || request.isSettled() || !request.matchesChannelKey(expectedChannelKey)) {
             return null;
         }

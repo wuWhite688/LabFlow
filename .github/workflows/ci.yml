@@ -78,6 +78,24 @@ jobs:
             exit 1
           fi
 
+      - name: 确认 MySQL 支付回写并发回归已执行
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          report = Path("target/surefire-reports/TEST-com.arthur.labops.PaymentRequestMysqlConcurrencyTest.xml")
+          if not report.is_file():
+              raise SystemExit("缺少 MySQL 支付并发测试报告：测试未执行或编译失败")
+          suite = ET.parse(report).getroot()
+          cases = suite.findall("testcase")
+          bad = [case.attrib.get("name") for case in cases
+                 if any(case.find(tag) is not None for tag in ("skipped", "failure", "error"))]
+          if len(cases) < 12 or bad or any(int(suite.get(tag, "0")) for tag in ("skipped", "failures", "errors")):
+              raise SystemExit(f"MySQL 支付并发回归未完整通过：cases={len(cases)}, bad={bad}, totals={suite.attrib}")
+          print(f"MySQL 支付回写并发回归已执行：{len(cases)} 项全部通过，无 skipped")
+          PY
 
       # 失败时同样上传，否则排查 CI 红灯只能靠日志里被截断的堆栈
       - name: 上传测试报告

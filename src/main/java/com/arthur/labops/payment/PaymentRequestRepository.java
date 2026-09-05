@@ -4,7 +4,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.persistence.LockModeType;
+
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -12,7 +15,38 @@ public interface PaymentRequestRepository extends JpaRepository<PaymentRequest, 
 
     Optional<PaymentRequest> findByIdempotencyKey(String idempotencyKey);
 
+    /**
+     * The same lookup, holding a row lock until the transaction commits.
+     *
+     * <p>Every path that reads state, decides on it, and then writes must use this
+     * one. Under REPEATABLE READ a plain read keeps its snapshot, so a guard like
+     * {@link PaymentRequest#matchesChannelKey(String)} would be checked against a
+     * channel attempt that another transaction has already advanced — and because
+     * Hibernate updates every column, the stale transaction would then write the
+     * old {@code channel_attempt} back over the new one.
+     *
+     * <p>Take this lock <em>before</em> loading the entity any other way in the
+     * same persistence context: a locking query returns the instance already in
+     * the first-level cache without refreshing its fields, so the lock would be
+     * held over values that are still stale.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select request from PaymentRequest request where request.idempotencyKey = :idempotencyKey")
+    Optional<PaymentRequest> findByIdempotencyKeyForUpdate(@Param("idempotencyKey") String idempotencyKey);
+
     List<PaymentRequest> findByOrderNoOrderByIdAsc(String orderNo);
+
+    /**
+     * Every outbound request of an order, locked, in id order.
+     *
+     * <p>The callback path has to pick the request whose current channel key the
+     * rejection names, and that choice is only sound if no one can advance the key
+     * between the read and the write. Ordering by id keeps multi-row locking in a
+     * fixed sequence so two callbacks on the same order cannot deadlock.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select request from PaymentRequest request where request.orderNo = :orderNo order by request.id")
+    List<PaymentRequest> findByOrderNoForUpdateOrderByIdAsc(@Param("orderNo") String orderNo);
 
     /**
      * The one live outbound request of this kind for an order, used to correlate a
