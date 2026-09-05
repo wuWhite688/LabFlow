@@ -44,7 +44,7 @@ public class PaymentDispatchService {
 
     @Transactional
     public void abandonIntent(String idempotencyKey) {
-        requestRepository.findByIdempotencyKey(idempotencyKey)
+        requestRepository.findByIdempotencyKeyForUpdate(idempotencyKey)
                 .filter(PaymentRequest::markObsolete)
                 .ifPresent(request -> log.info("Outbound payment intent abandoned key={}", idempotencyKey));
     }
@@ -75,10 +75,20 @@ public class PaymentDispatchService {
     /**
      * Records an intent once. Asking again for an existing unsettled intent nudges
      * it immediately instead of waiting for the scheduled retry scan.
+     *
+     * <p>The order row is locked first and serves as the mutex for creating intents
+     * on that order. Locking the request row instead is not an option when the row
+     * may not exist yet: {@code FOR UPDATE} on a missing row takes a gap lock, and
+     * two concurrent creations would then deadlock on insert. The unique index on
+     * {@code idempotency_key} remains the last line of defence.
+     *
+     * <p>Lock order is payment_order then payment_request, matching the callback
+     * path. Nothing here may go back and take an equipment or reservation lock.
      */
     @Transactional
     public boolean enqueue(String orderNo, PaymentTransactionType type, long amountCents, String idempotencyKey) {
-        PaymentRequest existing = requestRepository.findByIdempotencyKey(idempotencyKey).orElse(null);
+        orderRepository.findByOrderNoForUpdate(orderNo);
+        PaymentRequest existing = requestRepository.findByIdempotencyKeyForUpdate(idempotencyKey).orElse(null);
         if (existing != null) {
             log.info("Outbound payment request already queued key={} status={}",
                     idempotencyKey, existing.getStatus());
@@ -97,6 +107,11 @@ public class PaymentDispatchService {
      * channel key. The completion write is also keyed to that exact attempt, so an
      * immediate callback that advances the request cannot be overwritten when the
      * older channel call returns.
+     *
+     * <p>Deliberately not transactional, and the channel call deliberately holds no
+     * row lock: a synchronous callback arrives on another thread and needs the same
+     * row, so holding it here would make the call wait on itself. The completion
+     * write takes the lock afterwards, in its own short transaction.
      */
     public PaymentRequest attempt(String idempotencyKey) {
         PaymentRequest request = requestRepository.findByIdempotencyKey(idempotencyKey).orElse(null);
