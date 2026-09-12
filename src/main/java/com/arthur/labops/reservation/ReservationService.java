@@ -126,6 +126,7 @@ public class ReservationService {
     @Transactional(noRollbackFor = ReservationAlreadyExpiredException.class)
     public ReservationResponse decide(Long reservationId, ReservationDecisionRequest request) {
         PlatformUser actor = currentUserService.getRequiredUser();
+        assertTeacherOrAdmin(actor);
         Reservation reservation = findForStateChange(reservationId);
         if (reservation.getStatus() != ReservationStatus.PENDING) {
             throw new BusinessException(
@@ -136,7 +137,6 @@ public class ReservationService {
                     "RESERVATION_EXPIRED", "RESERVATION", reservation.getId(), "审批时发现待审批预约已过期");
             throw new ReservationAlreadyExpiredException();
         }
-        assertTeacherOrAdmin(actor);
         Equipment equipment = reservation.getEquipment();
         if (request.decision() == ReservationStatus.APPROVED) {
             if (equipment.getStatus() == EquipmentStatus.MAINTENANCE
