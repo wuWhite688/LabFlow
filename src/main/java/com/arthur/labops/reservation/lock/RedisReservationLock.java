@@ -39,6 +39,7 @@ public class RedisReservationLock implements ReservationLock {
     private final Duration waitTime;
     private final Duration leaseTime;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public RedisReservationLock(
             StringRedisTemplate redisTemplate,
             @Value("${labops.reservation-lock.wait:2s}") Duration waitTime,
