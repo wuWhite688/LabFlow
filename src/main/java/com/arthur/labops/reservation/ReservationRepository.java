@@ -13,22 +13,18 @@ import jakarta.persistence.LockModeType;
 
 public interface ReservationRepository extends JpaRepository<Reservation, Long>, JpaSpecificationExecutor<Reservation> {
 
-    boolean existsByEquipmentIdAndStatusInAndStartTimeLessThanAndEndTimeGreaterThan(
-            Long equipmentId,
-            Collection<ReservationStatus> statuses,
-            Instant requestedEnd,
-            Instant requestedStart);
-
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
-            select case when count(reservation) > 0 then true else false end
+            select reservation
             from Reservation reservation
             where reservation.equipment.id = :equipmentId
               and reservation.status in :statuses
               and reservation.startTime < :requestedEnd
               and reservation.endTime > :requestedStart
-              and reservation.id <> :excludeId
+              and (:excludeId is null or reservation.id <> :excludeId)
+            order by reservation.id
             """)
-    boolean existsConflictExcludingId(
+    java.util.List<Reservation> findConflictsForUpdate(
             @Param("equipmentId") Long equipmentId,
             @Param("statuses") Collection<ReservationStatus> statuses,
             @Param("requestedEnd") Instant requestedEnd,
