@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.arthur.labops.audit.AuditLogService;
 import com.arthur.labops.payment.reconcile.PaymentDiscrepancyTicketService;
@@ -43,6 +43,7 @@ public class PaymentCallbackService {
     private final PaymentDispatchService dispatchService;
     private final PaymentRequestRepository requestRepository;
     private final PaymentDiscrepancyTicketService ticketService;
+    private final TransactionTemplate transactionTemplate;
 
     public PaymentCallbackService(PaymentOrderRepository orderRepository,
                                   PaymentTransactionRepository transactionRepository,
@@ -53,7 +54,8 @@ public class PaymentCallbackService {
                                   ApplicationEventPublisher eventPublisher,
                                   PaymentDispatchService dispatchService,
                                   PaymentRequestRepository requestRepository,
-                                  PaymentDiscrepancyTicketService ticketService) {
+                                  PaymentDiscrepancyTicketService ticketService,
+                                  TransactionTemplate transactionTemplate) {
         this.orderRepository = orderRepository;
         this.transactionRepository = transactionRepository;
         this.reservationRepository = reservationRepository;
@@ -64,16 +66,27 @@ public class PaymentCallbackService {
         this.dispatchService = dispatchService;
         this.requestRepository = requestRepository;
         this.ticketService = ticketService;
+        this.transactionTemplate = transactionTemplate;
     }
 
-    @Transactional
     public PaymentCallbackResult handle(PaymentCallbackRequest request) {
-        PaymentOrder unlocked = orderRepository.findByOrderNo(request.orderNo())
+        // Read only immutable routing columns before taking locks. Loading the
+        // PaymentOrder entity here would put a stale version in the persistence
+        // context while a concurrent callback owns the row; a later FOR UPDATE
+        // then returns that same managed instance instead of hydrating the newly
+        // committed version.
+        PaymentOrderRepository.Routing routing = orderRepository.findRoutingByOrderNo(request.orderNo())
                 .orElseThrow(() -> new BusinessException(
                         "PAYMENT_ORDER_NOT_FOUND", "支付订单不存在", HttpStatus.NOT_FOUND));
 
-        equipmentRepository.findByIdForUpdate(unlocked.getEquipmentId());
-        Reservation reservation = reservationRepository.findByIdForUpdate(unlocked.getReservationId())
+        return transactionTemplate.execute(status -> handleInTransaction(request, routing));
+    }
+
+    private PaymentCallbackResult handleInTransaction(PaymentCallbackRequest request,
+                                                       PaymentOrderRepository.Routing routing) {
+
+        equipmentRepository.findByIdForUpdate(routing.getEquipmentId());
+        Reservation reservation = reservationRepository.findByIdForUpdate(routing.getReservationId())
                 .orElseThrow(() -> new BusinessException(
                         "RESERVATION_NOT_FOUND", "预约不存在", HttpStatus.NOT_FOUND));
         PaymentOrder order = orderRepository.findByOrderNoForUpdate(request.orderNo())
@@ -82,14 +95,19 @@ public class PaymentCallbackService {
 
         if (!request.succeeded()) {
             auditLogService.recordSystem("PAYMENT_CALLBACK_UNSUCCESSFUL", "RESERVATION",
-                    unlocked.getReservationId(),
+                    order.getReservationId(),
                     "渠道回调状态为 " + request.status() + "，订单号 " + request.orderNo() + "，不计入流水");
             log.info("Payment callback ignored, channel status={} orderNo={} attemptKey={}",
                     request.status(), request.orderNo(), request.idempotencyKey());
             reopenRejectedRequest(request);
-            return new PaymentCallbackResult(request.orderNo(), false, unlocked.getStatus());
+            return new PaymentCallbackResult(request.orderNo(), false, order.getStatus());
         }
 
+        // The routing projection was read before this transaction began, so this
+        // is its first consistent read. All locking reads above have already
+        // finished waiting, and this snapshot includes the previous callback's
+        // ledger insert. Keeping this read non-locking also avoids next-key locks
+        // for absent keys, which could deadlock first callbacks for other orders.
         if (transactionRepository.findByIdempotencyKey(request.idempotencyKey()).isPresent()) {
             log.info("Payment callback ignored as replay orderNo={} idempotencyKey={}",
                     request.orderNo(), request.idempotencyKey());

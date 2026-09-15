@@ -12,9 +12,22 @@ import jakarta.persistence.LockModeType;
 
 public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, Long> {
 
+    interface Routing {
+        Long getReservationId();
+        Long getEquipmentId();
+    }
+
     Optional<PaymentOrder> findByOrderNo(String orderNo);
 
     Optional<PaymentOrder> findByReservationId(Long reservationId);
+
+    @Query("""
+            select paymentOrder.reservationId as reservationId,
+                   paymentOrder.equipmentId as equipmentId
+            from PaymentOrder paymentOrder
+            where paymentOrder.orderNo = :orderNo
+            """)
+    Optional<Routing> findRoutingByOrderNo(@Param("orderNo") String orderNo);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select paymentOrder from PaymentOrder paymentOrder where paymentOrder.orderNo = :orderNo")

@@ -364,12 +364,13 @@ public class ReservationService {
     }
 
     private void assertNoConflict(Long equipmentId, Instant start, Instant end, Long excludeId) {
-        boolean conflict = excludeId == null
-                ? reservationRepository.existsByEquipmentIdAndStatusInAndStartTimeLessThanAndEndTimeGreaterThan(
-                        equipmentId, OCCUPIED_STATUSES, end, start)
-                : reservationRepository.existsConflictExcludingId(
-                        equipmentId, OCCUPIED_STATUSES, end, start, excludeId);
-        if (conflict) {
+        // This must be a locking/current read. Under MySQL REPEATABLE READ the
+        // authentication and routing lookups may already have opened a snapshot
+        // before this transaction waits for the equipment row. An ordinary
+        // exists query would keep reading that old snapshot after the wait and
+        // could approve a slot committed by the previous equipment-row owner.
+        if (!reservationRepository.findConflictsForUpdate(
+                equipmentId, OCCUPIED_STATUSES, end, start, excludeId).isEmpty()) {
             throw new BusinessException(
                     "RESERVATION_CONFLICT",
                     "该设备在所选时间段已有预约",
