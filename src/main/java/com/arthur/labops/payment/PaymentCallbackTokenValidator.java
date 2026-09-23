@@ -57,13 +57,23 @@ public final class PaymentCallbackTokenValidator {
      * {@code String.equals} leaks prefix length; {@link MessageDigest#isEqual}
      * does not. Null on either side is a miss — {@code getBytes} would NPE, and
      * a missing {@code X-Channel-Token} must not match an empty configured token.
+     *
+     * <p>The configured side is trimmed, exactly as {@link #requireProductionToken}
+     * trims it before validating. Otherwise a token with a stray trailing space or
+     * newline from {@code .env} passes the startup check and then rejects every
+     * callback. A configured token that is blank after trimming matches nothing:
+     * an empty header must never authenticate against an empty configuration.
      */
     public static boolean matchesPresentedToken(String expected, String presented) {
         if (expected == null || presented == null) {
             return false;
         }
+        String configured = expected.trim();
+        if (configured.isEmpty()) {
+            return false;
+        }
         return MessageDigest.isEqual(
-                expected.getBytes(StandardCharsets.UTF_8),
+                configured.getBytes(StandardCharsets.UTF_8),
                 presented.getBytes(StandardCharsets.UTF_8));
     }
 

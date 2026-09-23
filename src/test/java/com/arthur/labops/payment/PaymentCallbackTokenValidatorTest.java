@@ -72,6 +72,23 @@ class PaymentCallbackTokenValidatorTest {
                 null, "labflow-callback-9f3c")).isFalse();
         assertThat(PaymentCallbackTokenValidator.matchesPresentedToken(null, null)).isFalse();
         assertThat(PaymentCallbackTokenValidator.matchesPresentedToken("", null)).isFalse();
-        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken("", "")).isTrue();
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken("", "")).isFalse();
+    }
+
+    @Test
+    void configuredTokenIsTrimmedTheSameWayStartupValidationTrimsIt() {
+        String withStrayWhitespace = "labflow-callback-9f3c-0a1b2c3d \n";
+        // Startup validation accepts it because it validates the trimmed value...
+        assertThatCode(() -> PaymentCallbackTokenValidator.requireProductionToken(withStrayWhitespace))
+                .doesNotThrowAnyException();
+        // ...so the comparison must use the same trimmed value, or every callback 401s.
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken(
+                withStrayWhitespace, "labflow-callback-9f3c-0a1b2c3d")).isTrue();
+    }
+
+    @Test
+    void blankConfiguredTokenMatchesNothing() {
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken("   ", "")).isFalse();
+        assertThat(PaymentCallbackTokenValidator.matchesPresentedToken("   ", "   ")).isFalse();
     }
 }
