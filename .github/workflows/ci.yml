@@ -106,6 +106,35 @@ jobs:
           path: target/surefire-reports/
           retention-days: 7
 
+  # README 承诺默认 H2 profile 零外部依赖，start-fullstack.ps1 / build.ps1 又都会先跑
+  # mvnw package（含测试）。所以测试套件在没有 Docker 的机器上也必须能跑完：
+  # Testcontainers 用例应当跳过，而不是报错把整个构建打挂。
+  # ubuntu runner 自带 Docker，上面那个 job 永远发现不了这类问题，这里显式关掉它。
+  backend-without-docker:
+    name: 后端 · 无 Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 准备 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: 停掉 Docker
+        run: |
+          sudo systemctl stop docker.socket docker.service
+          if docker info >/dev/null 2>&1; then
+            echo "Docker 仍然可用，这个 job 失去意义" >&2
+            exit 1
+          fi
+
+      - name: 构建与测试
+        run: ./mvnw -B --no-transfer-progress verify
+
   frontend:
     name: 前端 · Node 22
     runs-on: ubuntu-latest
