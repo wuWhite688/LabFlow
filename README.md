@@ -260,6 +260,7 @@ production：`labops.reservation-expiry.mode=rabbit`。
 - Access JWT（HS256，默认 15 分钟）只放前端内存；Refresh 是不透明随机串，HttpOnly Cookie，库里只存 SHA-256。每次登录建一个 refresh family，成功 refresh 在族内轮换；出示已轮换成员且族内仍有活后继时整族吊销。并发双刷同一 cookie 以防盗优先，结束后 0 条 active refresh；Access JWT 语义不变（登出/reuse 后仍可用至过期）。V17 无法重建升级前已经发生的 refresh rotation lineage，因此迁移时旧 token 一行一 family，历史已 revoked 行按 LOGOUT 回填；refresh-family reuse detection 完整作用于 V17 之后的新 rotation。该迁移不强制现有用户会话登出。
 - 过滤器每次查库：用户删除/停用立即 401；权限用数据库角色，JWT 里的 role 不算数
 - 登录限流：IP+用户名 与 IP 总量（默认 5 / 20 / 15 分钟）；BFF 优先取 Cloudflare/Vercel 的边缘地址并覆盖为 `X-BFF-Client-IP`，后端只在 loopback/私有服务网来源上信任它，所以后端仍须保持内网可达
+- CSRF：业务接口走 Bearer 头，浏览器不会自动携带；只有 login/refresh/logout 靠 cookie。`SameSite=Lax` 按「站点」判断，兄弟子域（same-site 但不同源）的 POST 仍会带上 cookie，所以另加 Fetch Metadata 校验，BFF（所有写请求）与后端（这三个接口）用同一条规则：有 `Sec-Fetch-Site` 时只放行 `same-origin`/`none`；旧浏览器不发该头但一定带 `Origin`，此时**完整 origin**（协议、主机、端口）必须在可信列表里，`Origin: null` 一律拒绝；两个头都没有才视为非浏览器客户端。可信列表来自环境变量 `TRUSTED_ORIGINS`（逗号分隔，前后端共用）；后端默认 `http://localhost:13000,http://127.0.0.1:13000`，BFF 未配置时取请求自身的 origin。**部署在终止 TLS 的反向代理后面时必须把它设成对外的 https origin**，否则 BFF 看到的是内网地址。Spring 的 `csrf().disable()` 因此保留
 - 默认 `server.address=127.0.0.1`；非 loopback 禁止 demo 账号/种子，并拒绝占位 JWT
 - 分页 `size` 上限 100
 - production 必须提供 `JWT_SECRET`（≥32 字节、非 placeholder），demo 默认关闭
