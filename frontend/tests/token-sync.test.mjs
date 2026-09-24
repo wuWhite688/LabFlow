@@ -278,16 +278,24 @@ test("backend proxy forwards the cookie and rewrites the refresh cookie path", a
   );
 });
 
-async function proxyThrough(method, headers, path = ["api", "auth", "refresh"]) {
+async function proxyThrough(
+  method,
+  headers,
+  path = ["api", "auth", "refresh"],
+  { base = "http://localhost:3000", trustedOrigins } = {},
+) {
   const proxy = await loadProxyModule();
   const originalFetch = globalThis.fetch;
+  const originalTrusted = process.env.TRUSTED_ORIGINS;
   const forwarded = [];
   globalThis.fetch = async (_url, init) => {
     forwarded.push(new Headers(init.headers));
     return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
   };
+  if (trustedOrigins === undefined) delete process.env.TRUSTED_ORIGINS;
+  else process.env.TRUSTED_ORIGINS = trustedOrigins;
   try {
-    const request = new Request(`http://localhost:3000/api/backend/${path.join("/")}`, {
+    const request = new Request(`${base}/api/backend/${path.join("/")}`, {
       method,
       headers,
       body: method === "GET" ? undefined : "{}",
@@ -296,6 +304,8 @@ async function proxyThrough(method, headers, path = ["api", "auth", "refresh"]) 
     return { response, forwarded };
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalTrusted === undefined) delete process.env.TRUSTED_ORIGINS;
+    else process.env.TRUSTED_ORIGINS = originalTrusted;
   }
 }
 
@@ -327,6 +337,32 @@ test("backend proxy falls back to Origin when the browser sends no fetch metadat
   const own = await proxyThrough("POST", { origin: "http://localhost:3000" });
   assert.equal(own.response.status, 200);
   assert.equal(own.forwarded.length, 1);
+});
+
+test("backend proxy compares the full origin, so a scheme change is not same-origin", async () => {
+  const downgraded = await proxyThrough("POST", { origin: "http://app.example.com" }, undefined, {
+    base: "https://app.example.com",
+  });
+  assert.equal(downgraded.response.status, 403);
+  assert.equal(downgraded.forwarded.length, 0);
+
+  const otherPort = await proxyThrough("POST", { origin: "http://localhost:8081" });
+  assert.equal(otherPort.response.status, 403);
+  assert.equal(otherPort.forwarded.length, 0);
+});
+
+test("behind a reverse proxy TRUSTED_ORIGINS names the public origin instead of the request URL", async () => {
+  // TLS 在反向代理上终止，BFF 看到的是内网 http 地址，浏览器的 Origin 是对外的 https。
+  const options = { base: "http://127.0.0.1:13000", trustedOrigins: "https://lab.example.edu" };
+
+  const publicPage = await proxyThrough("POST", { origin: "https://lab.example.edu" }, undefined, options);
+  assert.equal(publicPage.response.status, 200);
+  assert.equal(publicPage.forwarded.length, 1);
+
+  // 配置后只认配置：内网地址本身不再被当成可信来源。
+  const internal = await proxyThrough("POST", { origin: "http://127.0.0.1:13000" }, undefined, options);
+  assert.equal(internal.response.status, 403);
+  assert.equal(internal.forwarded.length, 0);
 });
 
 test("backend proxy forwards same-origin writes with their fetch metadata", async () => {

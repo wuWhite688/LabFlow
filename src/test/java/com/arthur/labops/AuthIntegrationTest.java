@@ -465,6 +465,36 @@ class AuthIntegrationTest {
         assertThat(refreshTokenRepository.count()).isZero();
     }
 
+    // 旧浏览器不发 Sec-Fetch-Site，但跨源 POST 一定带 Origin。缺头不能等于放行。
+    @Test
+    void foreignOriginWithoutFetchMetadataCannotEndTheSession() throws Exception {
+        Cookie tokenA = refreshCookie(performLogin("teacher", "teacher123"));
+
+        mockMvc.perform(post("/api/auth/logout").cookie(tokenA).header("Origin", "https://evil.example.com"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CROSS_SITE_REQUEST_BLOCKED"));
+
+        assertThat(tokenActive(tokenA)).isTrue();
+        assertThat(tokenRevoked(tokenA)).isFalse();
+    }
+
+    @Test
+    void originFallbackComparesTheFullOriginNotJustTheHost() throws Exception {
+        Cookie tokenA = refreshCookie(performLogin("teacher", "teacher123"));
+
+        // 沙箱 iframe、data: 页面发出的 Origin: null
+        mockMvc.perform(post("/api/auth/refresh").cookie(tokenA).header("Origin", "null"))
+                .andExpect(status().isForbidden());
+        // 与可信来源只差协议，不是同源
+        mockMvc.perform(post("/api/auth/refresh").cookie(tokenA).header("Origin", "https://localhost:13000"))
+                .andExpect(status().isForbidden());
+        assertThat(tokenActive(tokenA)).isTrue();
+
+        // 默认可信来源是本地前端 http://localhost:13000
+        mockMvc.perform(post("/api/auth/refresh").cookie(tokenA).header("Origin", "http://localhost:13000"))
+                .andExpect(status().isOk());
+    }
+
     @Test
     void familyIdColumnIsNotNullWithoutDefaultZero() {
         assertThat(familyIdColumnDefault()).isNull();
