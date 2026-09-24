@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: ["main"]
 
+# GITHUB_TOKEN 只给读权限：这里只 checkout、构建、测试、上传报告，不写仓库。
+# 仓库默认值目前也是 read，但写在 workflow 里才不会随仓库设置被悄悄放大。
+permissions:
+  contents: read
+
 # 同一分支上新的推送会取消仍在排队的旧运行，避免浪费 runner 时间
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
