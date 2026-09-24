@@ -17,7 +17,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.arthur.labops.payment.PaymentOrder;
 import com.arthur.labops.payment.PaymentOrderRepository;
 import com.arthur.labops.payment.PaymentOrderStatus;
+import com.arthur.labops.payment.PaymentRequest;
+import com.arthur.labops.payment.PaymentRequestRepository;
+import com.arthur.labops.payment.PaymentRequestStatus;
 import com.arthur.labops.payment.PaymentService;
+import com.arthur.labops.payment.PaymentTransactionType;
 import com.arthur.labops.payment.channel.ChannelEntryType;
 import com.arthur.labops.payment.channel.SimulatedPaymentChannel;
 import com.arthur.labops.payment.reconcile.ReconciliationReport;
@@ -66,6 +70,9 @@ class RefundRequestRecoveryIntegrationTest {
     private ReservationRepository reservationRepository;
 
     @Autowired
+    private PaymentRequestRepository requestRepository;
+
+    @Autowired
     private ReconciliationService reconciliationService;
 
     private PaymentScenario scenario;
@@ -87,20 +94,31 @@ class RefundRequestRecoveryIntegrationTest {
         scenario.payViaApi(orderNo, "student", "student123");
         awaitReservation(reservationId, ReservationStatus.PAID);
 
-        // Armed only once the payment is safely through, so the injected failure
-        // lands on the refund rather than on the charge.
-        channel.failNextOutbound(1);
+        // Armed only once the payment is safely through, so the outage lands on the
+        // refund rather than on the charge. The channel stays down until healed below:
+        // the immediate dispatch and the retry scan may both pick up the brand-new
+        // request (PaymentDispatchService.attempt allows that race, both present the
+        // same channel key), so a single injected failure could be consumed by one of
+        // them while the other lands the refund, and "it failed on the way out" would
+        // no longer hold.
+        channel.failNextOutbound(Integer.MAX_VALUE);
         assertThat(scenario.cancelAsStudent(reservationId).get("status")).isEqualTo("REFUNDING");
 
-        Await.settle();
+        PaymentRequest failed = awaitFailedRefundRequest(orderNo);
+        assertThat(failed.getLastError())
+                .as("the refund really went out and failed, rather than never being attempted")
+                .isNotBlank();
         assertThat(channel.ledger())
-                .as("the first attempt genuinely did not reach the channel")
+                .as("the failed attempt genuinely did not reach the channel")
                 .filteredOn(entry -> entry.orderNo().equals(orderNo)
                         && entry.type() == ChannelEntryType.REFUND)
                 .isEmpty();
+        assertThat(reservationRepository.findById(reservationId).orElseThrow().getStatus())
+                .isEqualTo(ReservationStatus.REFUNDING);
 
-        // Nothing else happens: no user request, no callback. Recovery has to come
-        // from the platform itself.
+        // The channel comes back. Nothing else happens: no user request, no callback.
+        // Recovery has to come from the platform itself.
+        channel.failNextOutbound(0);
         awaitReservation(reservationId, ReservationStatus.CANCELLED);
 
         PaymentOrder order = orderRepository.findByOrderNo(orderNo).orElseThrow();
@@ -118,6 +136,22 @@ class RefundRequestRecoveryIntegrationTest {
         ReconciliationReport report = reconciliationService.reconcile(settlementDate);
         assertThat(report.discrepancies())
                 .noneMatch(discrepancy -> discrepancy.orderNo().equals(orderNo));
+    }
+
+    private PaymentRequest awaitFailedRefundRequest(String orderNo) throws Exception {
+        Instant deadline = Instant.now().plusSeconds(20);
+        while (Instant.now().isBefore(deadline)) {
+            PaymentRequest refund = requestRepository.findAll().stream()
+                    .filter(request -> request.getOrderNo().equals(orderNo)
+                            && request.getType() == PaymentTransactionType.REFUND)
+                    .findFirst()
+                    .orElse(null);
+            if (refund != null && refund.getStatus() == PaymentRequestStatus.FAILED) {
+                return refund;
+            }
+            TimeUnit.MILLISECONDS.sleep(50);
+        }
+        throw new AssertionError("refund request for " + orderNo + " never recorded a failed attempt");
     }
 
     private void awaitReservation(Long reservationId, ReservationStatus expected) throws Exception {
