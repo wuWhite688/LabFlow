@@ -4,6 +4,7 @@ import static com.arthur.labops.TestAuth.loginAccessHeader;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -418,6 +419,50 @@ class AuthIntegrationTest {
     void logoutWithoutCookieReturnsNoContent() throws Exception {
         mockMvc.perform(post("/api/auth/logout"))
                 .andExpect(status().isNoContent());
+    }
+
+    // refresh / logout 靠浏览器自动携带的 cookie 认证。SameSite=Lax 按「站点」判断，
+    // 兄弟子域（same-site 但不同源）发起的 POST 仍会带上它，所以同站也必须拦。
+    @Test
+    void sameSiteRefreshIsRejectedBeforeItRotatesAnything() throws Exception {
+        Cookie tokenA = refreshCookie(performLogin("teacher", "teacher123"));
+
+        mockMvc.perform(post("/api/auth/refresh").cookie(tokenA).header("Sec-Fetch-Site", "same-site"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CROSS_SITE_REQUEST_BLOCKED"))
+                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
+
+        // 被拦下的请求若已悄悄轮换，再出示 A 就会触发重用检测、整族吊销、401。
+        assertThat(tokenActive(tokenA)).isTrue();
+        mockMvc.perform(post("/api/auth/refresh").cookie(tokenA).header("Sec-Fetch-Site", "same-origin"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void crossSiteLogoutDoesNotEndTheSession() throws Exception {
+        Cookie tokenA = refreshCookie(performLogin("teacher", "teacher123"));
+
+        mockMvc.perform(post("/api/auth/logout").cookie(tokenA).header("Sec-Fetch-Site", "cross-site"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CROSS_SITE_REQUEST_BLOCKED"))
+                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
+
+        assertThat(tokenActive(tokenA)).isTrue();
+        assertThat(tokenRevoked(tokenA)).isFalse();
+    }
+
+    @Test
+    void crossSiteLoginDoesNotPlantASession() throws Exception {
+        // 登录 CSRF：攻击者让受害者浏览器登进攻击者的账号。
+        mockMvc.perform(post("/api/auth/login")
+                        .header("Sec-Fetch-Site", "cross-site")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"teacher\",\"password\":\"teacher123\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CROSS_SITE_REQUEST_BLOCKED"))
+                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
+
+        assertThat(refreshTokenRepository.count()).isZero();
     }
 
     @Test
