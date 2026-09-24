@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,14 +30,19 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+    ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request,
+                                       @RequestHeader(name = FetchMetadataGuard.HEADER, required = false) String fetchSite,
+                                       HttpServletRequest httpRequest) {
+        FetchMetadataGuard.requireSameOrigin(fetchSite);
         IssuedAuthSession session = authService.login(request, clientIp(httpRequest));
         return withRefreshCookie(session);
     }
 
     @PostMapping("/refresh")
     ResponseEntity<AuthResponse> refresh(
-            @CookieValue(name = REFRESH_COOKIE_NAME, required = false) String refreshToken) {
+            @CookieValue(name = REFRESH_COOKIE_NAME, required = false) String refreshToken,
+            @RequestHeader(name = FetchMetadataGuard.HEADER, required = false) String fetchSite) {
+        FetchMetadataGuard.requireSameOrigin(fetchSite);
         if (refreshToken == null || refreshToken.isBlank()) {
             return ResponseEntity.noContent().build();
         }
@@ -46,7 +52,9 @@ public class AuthController {
 
     @PostMapping("/logout")
     ResponseEntity<Void> logout(
-            @CookieValue(name = REFRESH_COOKIE_NAME, required = false) String refreshToken) {
+            @CookieValue(name = REFRESH_COOKIE_NAME, required = false) String refreshToken,
+            @RequestHeader(name = FetchMetadataGuard.HEADER, required = false) String fetchSite) {
+        FetchMetadataGuard.requireSameOrigin(fetchSite);
         authService.logout(refreshToken);
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())

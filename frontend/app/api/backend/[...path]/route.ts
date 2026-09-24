@@ -24,7 +24,41 @@ export function clientIpFromHeaders(headers: Headers): string | null {
   return null;
 }
 
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * CSRF 防护：写请求必须来自本站页面。
+ *
+ * refresh cookie 由浏览器自动携带。SameSite=Lax 按「站点」判断，兄弟子域
+ * （same-site 但不同源）发起的 POST 仍会带上它，所以只放行 same-origin。
+ * Sec-Fetch-Site 由浏览器填写，页面脚本改不了；none 是用户直接输入地址或书签。
+ * 老浏览器没有它时退回比对 Origin 的 host。两个头都没有说明不是浏览器
+ * （脚本、健康检查），不构成 CSRF，放行。GET/HEAD 不改状态，不拦。
+ */
+export function isCrossSiteWrite(request: Request): boolean {
+  if (!UNSAFE_METHODS.has(request.method.toUpperCase())) return false;
+
+  const site = request.headers.get("sec-fetch-site");
+  if (site) return site !== "same-origin" && site !== "none";
+
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+  if (origin === "null") return true;
+  try {
+    const ownHost = request.headers.get("host") ?? new URL(request.url).host;
+    return new URL(origin).host !== ownHost;
+  } catch {
+    return true;
+  }
+}
+
 async function proxy(request: Request, context: { params: Promise<{ path: string[] }> }) {
+  if (isCrossSiteWrite(request)) {
+    return Response.json(
+      { code: "CROSS_SITE_REQUEST_BLOCKED", message: "跨站请求已被拒绝，请从本站页面发起操作" },
+      { status: 403 },
+    );
+  }
   const { path } = await context.params;
   if (!path.length || path.some((part) => part === ".." || part.includes("/"))) {
     return Response.json({ code: "INVALID_PROXY_PATH", message: "请求路径无效" }, { status: 400 });
@@ -33,7 +67,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const incomingUrl = new URL(request.url);
   const targetUrl = new URL(`/${path.join("/")}${incomingUrl.search}`, BACKEND_BASE_URL);
   const headers = new Headers();
-  for (const name of ["authorization", "content-type", "accept", "cookie"]) {
+  for (const name of ["authorization", "content-type", "accept", "cookie", "origin", "sec-fetch-site"]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
