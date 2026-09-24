@@ -210,3 +210,16 @@ py -3 .\benchmark\bench_reservation.py `
 复核：打开对应 JSON 看 `success_201` / `conflict_409` / `latency_all` / `throughput_rps` / `error_code_counts`，再对照同名 `.stdout.log`、`.jsonl` 和后端锁日志。`acquired` / `released` 行数只是释放尝试次数，不能单独当作 Lua 删除成功或无租约泄漏的证明。
 
 选择逻辑的自动化测试：`py -3 .\benchmark\test_write_results.py`。
+
+# 支付并发压测（2026-09-15）
+
+脚本 `benchmark/bench_payment_concurrency.py`，production profile，MySQL 8.4（REPEATABLE READ）+ Redis 7.4 + RabbitMQ 3.13。10 / 25 / 50 并发各 3 轮，5 个场景共 1275 个计时请求，修复前后各跑一轮。
+
+| 场景 | 非预期响应率（修复前 → 修复后） |
+| --- | --- |
+| 相同支付回调重放 | 31.76%（81/255 返回 409 `RESOURCE_BUSY`）→ 0.00% |
+| 其余 4 个场景 | 0.00% → 0.00% |
+
+审批重叠预约的 HTTP 响应都在预期内，问题出在数据库：修复前 9 轮共批准 66 次，应为 9 次；修复后正好 9 次。修复后一轮 1275 个请求期间 InnoDB 死锁 0 次。修复本身见 PR #18（`24b3727`）。
+
+原始数据、代码版本、环境与限制：[`results/payment-20260915/`](results/payment-20260915/README.md)。

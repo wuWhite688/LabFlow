@@ -1,0 +1,1195 @@
+[
+  {
+    "scenario": "reservation",
+    "concurrency": 10,
+    "round": 1,
+    "requests": 10,
+    "wall_seconds": 0.5331880999729037,
+    "requests_per_second": 18.755107251096177,
+    "http_statuses": {
+      "201": 10
+    },
+    "business_codes": {
+      "None": 10
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 44.609,
+      "avg_ms": 286.152,
+      "p50_ms": 283.352,
+      "p95_ms": 497.37,
+      "p99_ms": 519.57,
+      "max_ms": 525.121
+    }
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 10,
+    "round": 1,
+    "requests": 10,
+    "wall_seconds": 0.27619320002850145,
+    "requests_per_second": 36.206539476598486,
+    "http_statuses": {
+      "200": 10
+    },
+    "business_codes": {
+      "None": 10
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 53.132,
+      "avg_ms": 168.628,
+      "p50_ms": 167.3,
+      "p95_ms": 263.702,
+      "p99_ms": 271.348,
+      "max_ms": 273.26
+    }
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 10,
+    "round": 1,
+    "requests": 10,
+    "wall_seconds": 0.0924278000020422,
+    "requests_per_second": 108.1925567824729,
+    "http_statuses": {
+      "409": 9,
+      "200": 1
+    },
+    "business_codes": {
+      "RESOURCE_BUSY": 9,
+      "None": 1
+    },
+    "non_2xx_rate": 0.9,
+    "unexpected_failure_rate": 0.9,
+    "latency": {
+      "count": 10,
+      "min_ms": 45.56,
+      "avg_ms": 63.03,
+      "p50_ms": 61.079,
+      "p95_ms": 82.668,
+      "p99_ms": 83.576,
+      "max_ms": 83.804
+    }
+  },
+  {
+    "scenario": "same_reservation_approval",
+    "concurrency": 10,
+    "round": 1,
+    "requests": 10,
+    "wall_seconds": 0.06475090002641082,
+    "requests_per_second": 154.43800774848174,
+    "http_statuses": {
+      "409": 9,
+      "200": 1
+    },
+    "business_codes": {
+      "RESERVATION_NOT_PENDING": 9,
+      "None": 1
+    },
+    "non_2xx_rate": 0.9,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 39.086,
+      "avg_ms": 45.037,
+      "p50_ms": 44.283,
+      "p95_ms": 54.023,
+      "p99_ms": 58.095,
+      "max_ms": 59.112
+    }
+  },
+  {
+    "scenario": "payment_initiation",
+    "concurrency": 10,
+    "round": 1,
+    "requests": 10,
+    "wall_seconds": 0.06742739997571334,
+    "requests_per_second": 148.30766133058515,
+    "http_statuses": {
+      "200": 10
+    },
+    "business_codes": {
+      "None": 10
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 32.431,
+      "avg_ms": 45.555,
+      "p50_ms": 42.803,
+      "p95_ms": 58.85,
+      "p99_ms": 59.312,
+      "max_ms": 59.427
+    }
+  },
+  {
+    "scenario": "reservation",
+    "concurrency": 10,
+    "round": 2,
+    "requests": 10,
+    "wall_seconds": 0.50856859999476,
+    "requests_per_second": 19.66303071031722,
+    "http_statuses": {
+      "201": 10
+    },
+    "business_codes": {
+      "None": 10
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 34.884,
+      "avg_ms": 271.791,
+      "p50_ms": 272.983,
+      "p95_ms": 481.333,
+      "p99_ms": 500.623,
+      "max_ms": 505.446
+    }
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 10,
+    "round": 2,
+    "requests": 10,
+    "wall_seconds": 0.2750201000017114,
+    "requests_per_second": 36.360978706420994,
+    "http_statuses": {
+      "200": 10
+    },
+    "business_codes": {
+      "None": 10
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 58.237,
+      "avg_ms": 160.002,
+      "p50_ms": 166.651,
+      "p95_ms": 256.224,
+      "p99_ms": 263.901,
+      "max_ms": 265.821
+    }
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 10,
+    "round": 2,
+    "requests": 10,
+    "wall_seconds": 0.10483830003067851,
+    "requests_per_second": 95.38498809188751,
+    "http_statuses": {
+      "409": 9,
+      "200": 1
+    },
+    "business_codes": {
+      "RESOURCE_BUSY": 9,
+      "None": 1
+    },
+    "non_2xx_rate": 0.9,
+    "unexpected_failure_rate": 0.9,
+    "latency": {
+      "count": 10,
+      "min_ms": 45.69,
+      "avg_ms": 68.236,
+      "p50_ms": 66.953,
+      "p95_ms": 93.504,
+      "p99_ms": 95.532,
+      "max_ms": 96.039
+    }
+  },
+  {
+    "scenario": "same_reservation_approval",
+    "concurrency": 10,
+    "round": 2,
+    "requests": 10,
+    "wall_seconds": 0.06455730000743642,
+    "requests_per_second": 154.90114981339198,
+    "http_statuses": {
+      "409": 9,
+      "200": 1
+    },
+    "business_codes": {
+      "RESERVATION_NOT_PENDING": 9,
+      "None": 1
+    },
+    "non_2xx_rate": 0.9,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 34.263,
+      "avg_ms": 40.151,
+      "p50_ms": 38.187,
+      "p95_ms": 49.97,
+      "p99_ms": 52.915,
+      "max_ms": 53.651
+    }
+  },
+  {
+    "scenario": "payment_initiation",
+    "concurrency": 10,
+    "round": 2,
+    "requests": 10,
+    "wall_seconds": 0.05564119998598471,
+    "requests_per_second": 179.72293916232698,
+    "http_statuses": {
+      "200": 10
+    },
+    "business_codes": {
+      "None": 10
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 27.743,
+      "avg_ms": 39.014,
+      "p50_ms": 41.829,
+      "p95_ms": 47.777,
+      "p99_ms": 48.583,
+      "max_ms": 48.784
+    }
+  },
+  {
+    "scenario": "reservation",
+    "concurrency": 10,
+    "round": 3,
+    "requests": 10,
+    "wall_seconds": 0.5722428999724798,
+    "requests_per_second": 17.475096677444,
+    "http_statuses": {
+      "201": 10
+    },
+    "business_codes": {
+      "None": 10
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 48.538,
+      "avg_ms": 324.887,
+      "p50_ms": 334.859,
+      "p95_ms": 543.278,
+      "p99_ms": 560.204,
+      "max_ms": 564.435
+    }
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 10,
+    "round": 3,
+    "requests": 10,
+    "wall_seconds": 0.25457329995697364,
+    "requests_per_second": 39.28141718589552,
+    "http_statuses": {
+      "200": 10
+    },
+    "business_codes": {
+      "None": 10
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 57.534,
+      "avg_ms": 152.595,
+      "p50_ms": 151.898,
+      "p95_ms": 234.842,
+      "p99_ms": 241.085,
+      "max_ms": 242.646
+    }
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 10,
+    "round": 3,
+    "requests": 10,
+    "wall_seconds": 0.09899359999690205,
+    "requests_per_second": 101.01663138135136,
+    "http_statuses": {
+      "409": 9,
+      "200": 1
+    },
+    "business_codes": {
+      "RESOURCE_BUSY": 9,
+      "None": 1
+    },
+    "non_2xx_rate": 0.9,
+    "unexpected_failure_rate": 0.9,
+    "latency": {
+      "count": 10,
+      "min_ms": 41.051,
+      "avg_ms": 65.218,
+      "p50_ms": 62.422,
+      "p95_ms": 90.553,
+      "p99_ms": 92.472,
+      "max_ms": 92.952
+    }
+  },
+  {
+    "scenario": "same_reservation_approval",
+    "concurrency": 10,
+    "round": 3,
+    "requests": 10,
+    "wall_seconds": 0.06142440001713112,
+    "requests_per_second": 162.80175300387182,
+    "http_statuses": {
+      "409": 9,
+      "200": 1
+    },
+    "business_codes": {
+      "RESERVATION_NOT_PENDING": 9,
+      "None": 1
+    },
+    "non_2xx_rate": 0.9,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 28.766,
+      "avg_ms": 36.002,
+      "p50_ms": 34.716,
+      "p95_ms": 45.231,
+      "p99_ms": 49.972,
+      "max_ms": 51.157
+    }
+  },
+  {
+    "scenario": "payment_initiation",
+    "concurrency": 10,
+    "round": 3,
+    "requests": 10,
+    "wall_seconds": 0.05351220001466572,
+    "requests_per_second": 186.87327370691858,
+    "http_statuses": {
+      "200": 10
+    },
+    "business_codes": {
+      "None": 10
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 10,
+      "min_ms": 29.428,
+      "avg_ms": 39.37,
+      "p50_ms": 41.633,
+      "p95_ms": 47.789,
+      "p99_ms": 48.432,
+      "max_ms": 48.593
+    }
+  },
+  {
+    "scenario": "reservation",
+    "concurrency": 25,
+    "round": 1,
+    "requests": 25,
+    "wall_seconds": 1.292670900002122,
+    "requests_per_second": 19.33980257462202,
+    "http_statuses": {
+      "201": 13,
+      "409": 12
+    },
+    "business_codes": {
+      "None": 13,
+      "RESERVATION_QUOTA_EXCEEDED": 12
+    },
+    "non_2xx_rate": 0.48,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 54.003,
+      "avg_ms": 662.592,
+      "p50_ms": 667.485,
+      "p95_ms": 1209.394,
+      "p99_ms": 1255.329,
+      "max_ms": 1266.332
+    }
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 25,
+    "round": 1,
+    "requests": 25,
+    "wall_seconds": 0.31771849998040125,
+    "requests_per_second": 78.68600664280534,
+    "http_statuses": {
+      "409": 17,
+      "200": 8
+    },
+    "business_codes": {
+      "RESERVATION_CONFLICT": 9,
+      "RESERVATION_NOT_PENDING": 8,
+      "None": 8
+    },
+    "non_2xx_rate": 0.68,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 63.988,
+      "avg_ms": 248.938,
+      "p50_ms": 273.891,
+      "p95_ms": 290.923,
+      "p99_ms": 293.701,
+      "max_ms": 294.493
+    }
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 25,
+    "round": 1,
+    "requests": 25,
+    "wall_seconds": 0.1625526999705471,
+    "requests_per_second": 153.796276558493,
+    "http_statuses": {
+      "409": 9,
+      "200": 16
+    },
+    "business_codes": {
+      "RESOURCE_BUSY": 9,
+      "None": 16
+    },
+    "non_2xx_rate": 0.36,
+    "unexpected_failure_rate": 0.36,
+    "latency": {
+      "count": 25,
+      "min_ms": 38.203,
+      "avg_ms": 97.482,
+      "p50_ms": 100.624,
+      "p95_ms": 133.771,
+      "p99_ms": 135.093,
+      "max_ms": 135.489
+    }
+  },
+  {
+    "scenario": "same_reservation_approval",
+    "concurrency": 25,
+    "round": 1,
+    "requests": 25,
+    "wall_seconds": 0.09474659996340051,
+    "requests_per_second": 263.8617112345689,
+    "http_statuses": {
+      "409": 24,
+      "200": 1
+    },
+    "business_codes": {
+      "RESERVATION_NOT_PENDING": 24,
+      "None": 1
+    },
+    "non_2xx_rate": 0.96,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 38.461,
+      "avg_ms": 58.473,
+      "p50_ms": 55.708,
+      "p95_ms": 76.768,
+      "p99_ms": 77.118,
+      "max_ms": 77.206
+    }
+  },
+  {
+    "scenario": "payment_initiation",
+    "concurrency": 25,
+    "round": 1,
+    "requests": 25,
+    "wall_seconds": 0.12186579999979585,
+    "requests_per_second": 205.1436908471604,
+    "http_statuses": {
+      "200": 25
+    },
+    "business_codes": {
+      "None": 25
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 51.302,
+      "avg_ms": 65.372,
+      "p50_ms": 61.72,
+      "p95_ms": 83.922,
+      "p99_ms": 95.095,
+      "max_ms": 98.613
+    }
+  },
+  {
+    "scenario": "reservation",
+    "concurrency": 25,
+    "round": 2,
+    "requests": 25,
+    "wall_seconds": 1.2892745000426657,
+    "requests_per_second": 19.390750378738336,
+    "http_statuses": {
+      "409": 14,
+      "201": 11
+    },
+    "business_codes": {
+      "RESERVATION_QUOTA_EXCEEDED": 14,
+      "None": 11
+    },
+    "non_2xx_rate": 0.56,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 48.078,
+      "avg_ms": 658.098,
+      "p50_ms": 644.837,
+      "p95_ms": 1204.821,
+      "p99_ms": 1260.864,
+      "max_ms": 1275.152
+    }
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 25,
+    "round": 2,
+    "requests": 25,
+    "wall_seconds": 0.315617399988696,
+    "requests_per_second": 79.20982810483639,
+    "http_statuses": {
+      "409": 16,
+      "200": 9
+    },
+    "business_codes": {
+      "RESERVATION_CONFLICT": 5,
+      "RESERVATION_NOT_PENDING": 11,
+      "None": 9
+    },
+    "non_2xx_rate": 0.64,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 59.041,
+      "avg_ms": 244.089,
+      "p50_ms": 271.0,
+      "p95_ms": 303.173,
+      "p99_ms": 305.541,
+      "max_ms": 305.977
+    }
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 25,
+    "round": 2,
+    "requests": 25,
+    "wall_seconds": 0.12298980000196025,
+    "requests_per_second": 203.2688889615362,
+    "http_statuses": {
+      "200": 16,
+      "409": 9
+    },
+    "business_codes": {
+      "None": 16,
+      "RESOURCE_BUSY": 9
+    },
+    "non_2xx_rate": 0.36,
+    "unexpected_failure_rate": 0.36,
+    "latency": {
+      "count": 25,
+      "min_ms": 44.813,
+      "avg_ms": 77.205,
+      "p50_ms": 75.626,
+      "p95_ms": 110.0,
+      "p99_ms": 113.14,
+      "max_ms": 113.741
+    }
+  },
+  {
+    "scenario": "same_reservation_approval",
+    "concurrency": 25,
+    "round": 2,
+    "requests": 25,
+    "wall_seconds": 0.06581820000428706,
+    "requests_per_second": 379.83414919234536,
+    "http_statuses": {
+      "409": 24,
+      "200": 1
+    },
+    "business_codes": {
+      "RESERVATION_NOT_PENDING": 24,
+      "None": 1
+    },
+    "non_2xx_rate": 0.96,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 27.267,
+      "avg_ms": 43.189,
+      "p50_ms": 43.383,
+      "p95_ms": 57.331,
+      "p99_ms": 58.603,
+      "max_ms": 58.753
+    }
+  },
+  {
+    "scenario": "payment_initiation",
+    "concurrency": 25,
+    "round": 2,
+    "requests": 25,
+    "wall_seconds": 0.09584399999585003,
+    "requests_per_second": 260.8405325433254,
+    "http_statuses": {
+      "200": 25
+    },
+    "business_codes": {
+      "None": 25
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 34.529,
+      "avg_ms": 52.3,
+      "p50_ms": 45.672,
+      "p95_ms": 86.66,
+      "p99_ms": 87.814,
+      "max_ms": 87.885
+    }
+  },
+  {
+    "scenario": "reservation",
+    "concurrency": 25,
+    "round": 3,
+    "requests": 25,
+    "wall_seconds": 1.2838946999982,
+    "requests_per_second": 19.47200187058569,
+    "http_statuses": {
+      "201": 9,
+      "409": 16
+    },
+    "business_codes": {
+      "None": 9,
+      "RESERVATION_QUOTA_EXCEEDED": 16
+    },
+    "non_2xx_rate": 0.64,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 43.795,
+      "avg_ms": 651.168,
+      "p50_ms": 647.546,
+      "p95_ms": 1207.448,
+      "p99_ms": 1255.692,
+      "max_ms": 1267.548
+    }
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 25,
+    "round": 3,
+    "requests": 25,
+    "wall_seconds": 0.19798390002688393,
+    "requests_per_second": 126.2728938898834,
+    "http_statuses": {
+      "409": 19,
+      "200": 6
+    },
+    "business_codes": {
+      "RESERVATION_CONFLICT": 8,
+      "None": 6,
+      "RESERVATION_NOT_PENDING": 11
+    },
+    "non_2xx_rate": 0.76,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 51.749,
+      "avg_ms": 142.876,
+      "p50_ms": 156.763,
+      "p95_ms": 174.191,
+      "p99_ms": 175.523,
+      "max_ms": 175.682
+    }
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 25,
+    "round": 3,
+    "requests": 25,
+    "wall_seconds": 0.14595090004149824,
+    "requests_per_second": 171.2904818873453,
+    "http_statuses": {
+      "409": 9,
+      "200": 16
+    },
+    "business_codes": {
+      "RESOURCE_BUSY": 9,
+      "None": 16
+    },
+    "non_2xx_rate": 0.36,
+    "unexpected_failure_rate": 0.36,
+    "latency": {
+      "count": 25,
+      "min_ms": 40.543,
+      "avg_ms": 90.44,
+      "p50_ms": 97.259,
+      "p95_ms": 118.938,
+      "p99_ms": 122.91,
+      "max_ms": 124.142
+    }
+  },
+  {
+    "scenario": "same_reservation_approval",
+    "concurrency": 25,
+    "round": 3,
+    "requests": 25,
+    "wall_seconds": 0.08310779999010265,
+    "requests_per_second": 300.81412337924075,
+    "http_statuses": {
+      "200": 1,
+      "409": 24
+    },
+    "business_codes": {
+      "None": 1,
+      "RESERVATION_NOT_PENDING": 24
+    },
+    "non_2xx_rate": 0.96,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 34.661,
+      "avg_ms": 49.912,
+      "p50_ms": 48.35,
+      "p95_ms": 65.484,
+      "p99_ms": 67.868,
+      "max_ms": 68.426
+    }
+  },
+  {
+    "scenario": "payment_initiation",
+    "concurrency": 25,
+    "round": 3,
+    "requests": 25,
+    "wall_seconds": 0.08945919998222962,
+    "requests_per_second": 279.4570039187256,
+    "http_statuses": {
+      "200": 25
+    },
+    "business_codes": {
+      "None": 25
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 25,
+      "min_ms": 35.396,
+      "avg_ms": 49.822,
+      "p50_ms": 47.487,
+      "p95_ms": 66.538,
+      "p99_ms": 68.329,
+      "max_ms": 68.871
+    }
+  },
+  {
+    "scenario": "reservation",
+    "concurrency": 50,
+    "round": 1,
+    "requests": 50,
+    "wall_seconds": 1.7948182999971323,
+    "requests_per_second": 27.857973144178377,
+    "http_statuses": {
+      "409": 43,
+      "201": 7
+    },
+    "business_codes": {
+      "RESERVATION_QUOTA_EXCEEDED": 43,
+      "None": 7
+    },
+    "non_2xx_rate": 0.86,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 72.706,
+      "avg_ms": 803.657,
+      "p50_ms": 691.334,
+      "p95_ms": 1609.336,
+      "p99_ms": 1729.728,
+      "max_ms": 1754.541
+    }
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 50,
+    "round": 1,
+    "requests": 50,
+    "wall_seconds": 0.27612779999617487,
+    "requests_per_second": 181.07557442855315,
+    "http_statuses": {
+      "409": 45,
+      "200": 5
+    },
+    "business_codes": {
+      "RESERVATION_NOT_PENDING": 31,
+      "RESERVATION_CONFLICT": 14,
+      "None": 5
+    },
+    "non_2xx_rate": 0.9,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 75.165,
+      "avg_ms": 178.765,
+      "p50_ms": 182.763,
+      "p95_ms": 222.692,
+      "p99_ms": 232.963,
+      "max_ms": 233.945
+    }
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 50,
+    "round": 1,
+    "requests": 50,
+    "wall_seconds": 0.23504649999085814,
+    "requests_per_second": 212.7238652859953,
+    "http_statuses": {
+      "200": 41,
+      "409": 9
+    },
+    "business_codes": {
+      "None": 41,
+      "RESOURCE_BUSY": 9
+    },
+    "non_2xx_rate": 0.18,
+    "unexpected_failure_rate": 0.18,
+    "latency": {
+      "count": 50,
+      "min_ms": 36.526,
+      "avg_ms": 131.103,
+      "p50_ms": 134.062,
+      "p95_ms": 186.272,
+      "p99_ms": 192.729,
+      "max_ms": 193.54
+    }
+  },
+  {
+    "scenario": "same_reservation_approval",
+    "concurrency": 50,
+    "round": 1,
+    "requests": 50,
+    "wall_seconds": 0.21970999997574836,
+    "requests_per_second": 227.5727095057986,
+    "http_statuses": {
+      "409": 49,
+      "200": 1
+    },
+    "business_codes": {
+      "RESERVATION_NOT_PENDING": 49,
+      "None": 1
+    },
+    "non_2xx_rate": 0.98,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 116.402,
+      "avg_ms": 154.237,
+      "p50_ms": 154.955,
+      "p95_ms": 185.443,
+      "p99_ms": 187.315,
+      "max_ms": 188.272
+    }
+  },
+  {
+    "scenario": "payment_initiation",
+    "concurrency": 50,
+    "round": 1,
+    "requests": 50,
+    "wall_seconds": 0.17464619997190312,
+    "requests_per_second": 286.2930885873494,
+    "http_statuses": {
+      "200": 50
+    },
+    "business_codes": {
+      "None": 50
+    },
+    "non_2xx_rate": 0.0,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 47.882,
+      "avg_ms": 90.677,
+      "p50_ms": 96.245,
+      "p95_ms": 135.834,
+      "p99_ms": 140.386,
+      "max_ms": 142.361
+    }
+  },
+  {
+    "scenario": "reservation",
+    "concurrency": 50,
+    "round": 2,
+    "requests": 50,
+    "wall_seconds": 1.6333360000280663,
+    "requests_per_second": 30.612194918339416,
+    "http_statuses": {
+      "409": 45,
+      "201": 5
+    },
+    "business_codes": {
+      "RESERVATION_QUOTA_EXCEEDED": 45,
+      "None": 5
+    },
+    "non_2xx_rate": 0.9,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 64.5,
+      "avg_ms": 728.232,
+      "p50_ms": 685.141,
+      "p95_ms": 1462.052,
+      "p99_ms": 1558.213,
+      "max_ms": 1579.603
+    }
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 50,
+    "round": 2,
+    "requests": 50,
+    "wall_seconds": 0.2139796999981627,
+    "requests_per_second": 233.66702542544607,
+    "http_statuses": {
+      "409": 45,
+      "200": 5
+    },
+    "business_codes": {
+      "RESERVATION_NOT_PENDING": 45,
+      "None": 5
+    },
+    "non_2xx_rate": 0.9,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 51.459,
+      "avg_ms": 142.137,
+      "p50_ms": 147.582,
+      "p95_ms": 174.419,
+      "p99_ms": 179.863,
+      "max_ms": 180.954
+    }
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 50,
+    "round": 2,
+    "requests": 50,
+    "wall_seconds": 0.23728729999857023,
+    "requests_per_second": 210.71502773347444,
+    "http_statuses": {
+      "200": 41,
+      "409": 9
+    },
+    "business_codes": {
+      "None": 41,
+      "RESOURCE_BUSY": 9
+    },
+    "non_2xx_rate": 0.18,
+    "unexpected_failure_rate": 0.18,
+    "latency": {
+      "count": 50,
+      "min_ms": 55.857,
+      "avg_ms": 137.415,
+      "p50_ms": 142.125,
+      "p95_ms": 186.554,
+      "p99_ms": 195.964,
+      "max_ms": 202.728
+    }
+  },
+  {
+    "scenario": "same_reservation_approval",
+    "concurrency": 50,
+    "round": 2,
+    "requests": 50,
+    "wall_seconds": 0.12529439997160807,
+    "requests_per_second": 399.06013366383564,
+    "http_statuses": {
+      "409": 49,
+      "200": 1
+    },
+    "business_codes": {
+      "RESERVATION_NOT_PENDING": 49,
+      "None": 1
+    },
+    "non_2xx_rate": 0.98,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 39.115,
+      "avg_ms": 70.793,
+      "p50_ms": 71.359,
+      "p95_ms": 96.147,
+      "p99_ms": 103.143,
+      "max_ms": 105.021
+    }
+  },
+  {
+    "scenario": "payment_initiation",
+    "concurrency": 50,
+    "round": 2,
+    "requests": 50,
+    "wall_seconds": 0.16095599997788668,
+    "requests_per_second": 310.6439027241567,
+    "http_statuses": {
+      "409": 1,
+      "200": 49
+    },
+    "business_codes": {
+      "PAYMENT_ORDER_NOT_PAYABLE": 1,
+      "None": 49
+    },
+    "non_2xx_rate": 0.02,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 34.829,
+      "avg_ms": 87.341,
+      "p50_ms": 92.885,
+      "p95_ms": 122.608,
+      "p99_ms": 129.663,
+      "max_ms": 131.454
+    }
+  },
+  {
+    "scenario": "reservation",
+    "concurrency": 50,
+    "round": 3,
+    "requests": 50,
+    "wall_seconds": 1.3754381999606267,
+    "requests_per_second": 36.352051296402344,
+    "http_statuses": {
+      "409": 47,
+      "201": 3
+    },
+    "business_codes": {
+      "RESERVATION_QUOTA_EXCEEDED": 47,
+      "None": 3
+    },
+    "non_2xx_rate": 0.94,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 65.246,
+      "avg_ms": 613.624,
+      "p50_ms": 563.188,
+      "p95_ms": 1200.508,
+      "p99_ms": 1306.442,
+      "max_ms": 1332.009
+    }
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 50,
+    "round": 3,
+    "requests": 50,
+    "wall_seconds": 0.1774800000130199,
+    "requests_per_second": 281.7218841352942,
+    "http_statuses": {
+      "409": 47,
+      "200": 3
+    },
+    "business_codes": {
+      "RESERVATION_NOT_PENDING": 47,
+      "None": 3
+    },
+    "non_2xx_rate": 0.94,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 36.94,
+      "avg_ms": 106.773,
+      "p50_ms": 106.82,
+      "p95_ms": 137.921,
+      "p99_ms": 141.584,
+      "max_ms": 143.806
+    }
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 50,
+    "round": 3,
+    "requests": 50,
+    "wall_seconds": 0.22737209999468178,
+    "requests_per_second": 219.90384924610143,
+    "http_statuses": {
+      "409": 9,
+      "200": 41
+    },
+    "business_codes": {
+      "RESOURCE_BUSY": 9,
+      "None": 41
+    },
+    "non_2xx_rate": 0.18,
+    "unexpected_failure_rate": 0.18,
+    "latency": {
+      "count": 50,
+      "min_ms": 60.084,
+      "avg_ms": 135.6,
+      "p50_ms": 136.33,
+      "p95_ms": 181.831,
+      "p99_ms": 188.195,
+      "max_ms": 191.934
+    }
+  },
+  {
+    "scenario": "same_reservation_approval",
+    "concurrency": 50,
+    "round": 3,
+    "requests": 50,
+    "wall_seconds": 0.1293267000000924,
+    "requests_per_second": 386.6177672511885,
+    "http_statuses": {
+      "409": 49,
+      "200": 1
+    },
+    "business_codes": {
+      "RESERVATION_NOT_PENDING": 49,
+      "None": 1
+    },
+    "non_2xx_rate": 0.98,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 36.02,
+      "avg_ms": 64.021,
+      "p50_ms": 65.378,
+      "p95_ms": 88.235,
+      "p99_ms": 95.874,
+      "max_ms": 96.451
+    }
+  },
+  {
+    "scenario": "payment_initiation",
+    "concurrency": 50,
+    "round": 3,
+    "requests": 50,
+    "wall_seconds": 0.15899199998239055,
+    "requests_per_second": 314.4812317949195,
+    "http_statuses": {
+      "200": 47,
+      "409": 3
+    },
+    "business_codes": {
+      "None": 47,
+      "PAYMENT_ORDER_NOT_PAYABLE": 3
+    },
+    "non_2xx_rate": 0.06,
+    "unexpected_failure_rate": 0.0,
+    "latency": {
+      "count": 50,
+      "min_ms": 28.912,
+      "avg_ms": 77.935,
+      "p50_ms": 91.076,
+      "p95_ms": 112.178,
+      "p99_ms": 114.143,
+      "max_ms": 114.678
+    }
+  }
+]
