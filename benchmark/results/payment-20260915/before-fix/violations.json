@@ -1,0 +1,1373 @@
+[
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 10,
+    "round": 1,
+    "success_responses": 10,
+    "occupied_rows_before_cleanup": [
+      [
+        "21",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "22",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "23",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "24",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "25",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "26",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "27",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "28",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "29",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "30",
+        "AWAITING_PAYMENT"
+      ]
+    ]
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 10,
+    "round": 1,
+    "unexpected_responses": [
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:00.706690800Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 81.28010004293174,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:00.676761900Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 47.11970000062138,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:00.690850Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 62.51070002326742,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:00.672668900Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 45.56030000094324,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:00.697176500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 68.50090000079945,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:00.682762800Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 53.08589997002855,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:00.714197Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 83.80359999136999,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:00.701177Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 73.48490000003949,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:00.686849700Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 59.647200047038496,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 10,
+    "round": 2,
+    "success_responses": 10,
+    "occupied_rows_before_cleanup": [
+      [
+        "32",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "33",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "34",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "35",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "36",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "37",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "38",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "39",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "40",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "41",
+        "AWAITING_PAYMENT"
+      ]
+    ]
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 10,
+    "round": 2,
+    "unexpected_responses": [
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:06.316821500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 74.76930000120774,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:06.330838700Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 90.40679997997358,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:06.310558Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 71.56280003255233,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:06.303558600Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 62.34290002612397,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:06.323833100Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 82.48380001168698,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:06.290971800Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 50.606400007382035,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:06.337346600Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 96.03860002243891,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:06.297478500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 57.439800002612174,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:06.283973500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 45.6902000005357,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 10,
+    "round": 3,
+    "success_responses": 10,
+    "occupied_rows_before_cleanup": [
+      [
+        "43",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "44",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "45",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "46",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "47",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "48",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "49",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "50",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "51",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "52",
+        "AWAITING_PAYMENT"
+      ]
+    ]
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 10,
+    "round": 3,
+    "unexpected_responses": [
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:13.146672500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 81.37289999285713,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:13.134154500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 63.70439997408539,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:13.107605400Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 41.05090000666678,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:13.140155300Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 71.54420000733808,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:13.158775300Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 92.95169997494668,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:13.127864400Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 61.13980000372976,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:13.120809800Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 52.860099996905774,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:13.114810700Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 47.51750000286847,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:13.152672800Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 87.62110001407564,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 25,
+    "round": 1,
+    "success_responses": 8,
+    "occupied_rows_before_cleanup": [
+      [
+        "56",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "57",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "58",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "59",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "60",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "64",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "65",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "66",
+        "AWAITING_PAYMENT"
+      ]
+    ]
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 25,
+    "round": 1,
+    "unexpected_responses": [
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:20.862786200Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 85.64419997856021,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:20.837054200Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 54.8998000449501,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:20.821668100Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 38.20329997688532,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:20.877870100Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 99.67490000417456,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:20.849708700Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 70.80699998186901,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:20.856238800Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 75.50549996085465,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:20.843725500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 61.33830000180751,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:20.870277100Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 88.91859999857843,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:20.830436500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 55.22859998745844,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 25,
+    "round": 2,
+    "success_responses": 9,
+    "occupied_rows_before_cleanup": [
+      [
+        "68",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "70",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "72",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "73",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "74",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "75",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "76",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "77",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "78",
+        "AWAITING_PAYMENT"
+      ]
+    ]
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 25,
+    "round": 2,
+    "unexpected_responses": [
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:27.206837700Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 55.89469999540597,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:27.208839100Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 60.272500035353005,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:27.199774Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 51.33590003242716,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:27.213817500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 65.00359997153282,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:27.216836300Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 65.55579998530447,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:27.197773700Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 47.03229997539893,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:27.194777600Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 44.81270001269877,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:27.202726200Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 53.43670002184808,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:27.212190900Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 61.85429997276515,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 25,
+    "round": 3,
+    "success_responses": 6,
+    "occupied_rows_before_cleanup": [
+      [
+        "80",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "81",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "82",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "83",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "86",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "87",
+        "AWAITING_PAYMENT"
+      ]
+    ]
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 25,
+    "round": 3,
+    "unexpected_responses": [
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:33.058848200Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 91.27020003506914,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:33.031213600Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 66.91459997091442,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:33.052533400Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 83.88719998765737,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:33.016334500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 52.172399999108166,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:33.011776400Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 41.23109998181462,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:33.023608200Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 57.88470001425594,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:33.045535200Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 74.7560000163503,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:33.007876500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 40.543499984778464,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:33.038829200Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 70.38920000195503,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 50,
+    "round": 1,
+    "success_responses": 5,
+    "occupied_rows_before_cleanup": [
+      [
+        "90",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "92",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "94",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "95",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "96",
+        "AWAITING_PAYMENT"
+      ]
+    ]
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 50,
+    "round": 1,
+    "unexpected_responses": [
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:40.322459700Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 97.8579000220634,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:40.308526300Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 84.50539998011664,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:40.330554600Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 90.32010001828894,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:40.315675400Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 87.12509996257722,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:40.294682800Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 59.199499955866486,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:40.280686400Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 41.720000037457794,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:40.301316700Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 64.27239999175072,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:40.287002500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 49.15929998969659,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:40.275219500Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 36.52600001078099,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 50,
+    "round": 2,
+    "success_responses": 5,
+    "occupied_rows_before_cleanup": [
+      [
+        "98",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "99",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "100",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "101",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "102",
+        "AWAITING_PAYMENT"
+      ]
+    ]
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 50,
+    "round": 2,
+    "unexpected_responses": [
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:47.831917100Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 66.30690000019968,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:47.845468800Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 75.91309997951612,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:47.839694600Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 82.40979997208342,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:47.873434Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 115.442999987863,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:47.859742100Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 100.99090001313016,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:47.816171300Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 55.857100000139326,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:47.866464100Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 104.94639998069033,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:47.853498300Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 85.59780003270134,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:47.825937300Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 61.4449999993667,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "overlapping_approval",
+    "concurrency": 50,
+    "round": 3,
+    "success_responses": 3,
+    "occupied_rows_before_cleanup": [
+      [
+        "104",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "105",
+        "AWAITING_PAYMENT"
+      ],
+      [
+        "106",
+        "AWAITING_PAYMENT"
+      ]
+    ]
+  },
+  {
+    "scenario": "callback",
+    "concurrency": 50,
+    "round": 3,
+    "unexpected_responses": [
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:54.814420100Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 75.27190004475415,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:54.799734800Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 60.20990002434701,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:54.856455400Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 116.64859997108579,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:54.828678200Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 84.84339999267831,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:54.842137800Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 98.51979999803007,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:54.849782400Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 89.95549997780472,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:54.806347600Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 61.4445999963209,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:54.821074700Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 74.07800003420562,
+        "error": null
+      },
+      {
+        "status": 409,
+        "data": {
+          "timestamp": "2026-09-15T10:41:54.835067600Z",
+          "status": 409,
+          "code": "RESOURCE_BUSY",
+          "message": "\u8d44\u6e90\u6b63\u88ab\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+          "fields": {}
+        },
+        "latency_ms": 87.12410001317039,
+        "error": null
+      }
+    ]
+  }
+]
