@@ -67,6 +67,8 @@ Token-first locking deadlocks with reuse: refresh of B holds B then waits for th
 
 H2 `FOR UPDATE` does not serialize; family `@Version` is the CI-stable backstop, same idea as `Reservation.version`. Concurrent double-refresh of still-active A is treated as reuse: at most one HTTP 200, then the family is compromised and **0** active refresh rows remain. The winner's access JWT still works until TTL.
 
+The same rule applies when the rotation's *response* is lost rather than duplicated. If the server commits the rotation of A to B but the `Set-Cookie` never reaches the browser (connection reset between the BFF and the browser, or a request aborted after the backend committed), the browser still holds A. The frontend deliberately keeps the session on a network error, so the next refresh presents A while B is active: that is indistinguishable from a stolen A being replayed, the family is compromised, the user has to sign in again, and a `refresh token reused` warning is logged for what was not an attack. This is accepted, not fixed. The usual mitigation is a short reuse grace window in which presenting the immediate predecessor returns the current successor instead of compromising the family, at the cost of letting a stolen predecessor ride along for that window.
+
 `RefreshTokenMysqlConcurrencyTest` repeats the concurrent + replay cases against MySQL 8.4 via Testcontainers when Docker is present. GitHub Actions must actually run that class (not skip it).
 
 ## Redis lock, Rabbit expiry, and compensation
