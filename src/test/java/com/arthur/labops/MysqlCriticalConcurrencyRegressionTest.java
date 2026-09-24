@@ -58,7 +58,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /** Regression coverage for failures that only occur on InnoDB REPEATABLE READ. */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(properties = {
         "labops.demo-users.enabled=true", "labops.demo-data.enabled=false",
         "labops.reservation-lock.mode=local", "labops.reservation-expiry.mode=local",
