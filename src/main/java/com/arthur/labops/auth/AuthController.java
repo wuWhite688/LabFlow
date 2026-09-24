@@ -23,17 +23,20 @@ public class AuthController {
 
     private final AuthService authService;
     private final JwtProperties jwtProperties;
+    private final FetchMetadataGuard fetchMetadataGuard;
 
-    public AuthController(AuthService authService, JwtProperties jwtProperties) {
+    public AuthController(AuthService authService, JwtProperties jwtProperties, FetchMetadataGuard fetchMetadataGuard) {
         this.authService = authService;
         this.jwtProperties = jwtProperties;
+        this.fetchMetadataGuard = fetchMetadataGuard;
     }
 
     @PostMapping("/login")
     ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request,
-                                       @RequestHeader(name = FetchMetadataGuard.HEADER, required = false) String fetchSite,
+                                       @RequestHeader(name = FetchMetadataGuard.SITE_HEADER, required = false) String fetchSite,
+                                       @RequestHeader(name = FetchMetadataGuard.ORIGIN_HEADER, required = false) String origin,
                                        HttpServletRequest httpRequest) {
-        FetchMetadataGuard.requireSameOrigin(fetchSite);
+        fetchMetadataGuard.requireSameOrigin(fetchSite, origin);
         IssuedAuthSession session = authService.login(request, clientIp(httpRequest));
         return withRefreshCookie(session);
     }
@@ -41,8 +44,9 @@ public class AuthController {
     @PostMapping("/refresh")
     ResponseEntity<AuthResponse> refresh(
             @CookieValue(name = REFRESH_COOKIE_NAME, required = false) String refreshToken,
-            @RequestHeader(name = FetchMetadataGuard.HEADER, required = false) String fetchSite) {
-        FetchMetadataGuard.requireSameOrigin(fetchSite);
+            @RequestHeader(name = FetchMetadataGuard.SITE_HEADER, required = false) String fetchSite,
+            @RequestHeader(name = FetchMetadataGuard.ORIGIN_HEADER, required = false) String origin) {
+        fetchMetadataGuard.requireSameOrigin(fetchSite, origin);
         if (refreshToken == null || refreshToken.isBlank()) {
             return ResponseEntity.noContent().build();
         }
@@ -53,8 +57,9 @@ public class AuthController {
     @PostMapping("/logout")
     ResponseEntity<Void> logout(
             @CookieValue(name = REFRESH_COOKIE_NAME, required = false) String refreshToken,
-            @RequestHeader(name = FetchMetadataGuard.HEADER, required = false) String fetchSite) {
-        FetchMetadataGuard.requireSameOrigin(fetchSite);
+            @RequestHeader(name = FetchMetadataGuard.SITE_HEADER, required = false) String fetchSite,
+            @RequestHeader(name = FetchMetadataGuard.ORIGIN_HEADER, required = false) String origin) {
+        fetchMetadataGuard.requireSameOrigin(fetchSite, origin);
         authService.logout(refreshToken);
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
